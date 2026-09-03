@@ -1,0 +1,98 @@
+{
+  "entities": {
+    "GlobalConfig": {
+      "title": "Global Configuration",
+      "description": "System-wide costs for fabrics, overheads, employees and expenses.",
+      "type": "object",
+      "properties": {
+        "fabricCosts": { "type": "object" },
+        "accessoryCosts": { "type": "object" },
+        "fixedExpenses": { "type": "object" },
+        "employees": { "type": "object" },
+        "baseLaborRate": { "type": "number" },
+        "monthlyProductionEstimate": { "type": "number" }
+      }
+    },
+    "PricingAudit": {
+      "title": "Pricing Audit",
+      "description": "A complete pricing audit for a product unit.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "brand": { "type": "string", "enum": ["Azafrán"] },
+        "description": { "type": "string" },
+        "createdAt": { "type": "number" },
+        "updatedAt": { "type": "number" },
+        "status": { "type": "string", "enum": ["draft", "completed"] },
+        "userId": { "type": "string" },
+        "materials": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string" },
+              "name": { "type": "string" },
+              "quantity": { "type": "number" },
+              "unit": { "type": "string" },
+              "costPerUnit": { "type": "number" },
+              "totalCost": { "type": "number" }
+            }
+          }
+        },
+        "totalMaterialsCost": { "type": "number" },
+        "labor": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string" },
+              "task": { "type": "string" },
+              "hours": { "type": "number" },
+              "hourlyRate": { "type": "number" },
+              "totalCost": { "type": "number" }
+            }
+          }
+        },
+        "totalLaborCost": { "type": "number" },
+        "indirectCosts": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string" },
+              "name": { "type": "string" },
+              "cost": { "type": "number" }
+            }
+          }
+        },
+        "totalIndirectCosts": { "type": "number" },
+        "extras": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": { "type": "string" },
+              "cost": { "type": "number" }
+            }
+          }
+        },
+        "totalExtrasCost": { "type": "number" },
+        "floorPrice": { "type": "number" },
+        "profitMargin": { "type": "number" },
+        "suggestedPrice": { "type": "number" }
+      },
+      "required": ["name", "brand", "userId", "createdAt", "updatedAt", "status", "floorPrice", "suggestedPrice"]
+    }
+  },
+  "firestore": {
+    "config/{configId}": {
+      "schema": "GlobalConfig",
+      "description": "Global price and rate settings."
+    },
+    "audits/{auditId}": {
+      "schema": "PricingAudit",
+      "description": "Collection of pricing audits."
+    }
+  }
+}

@@ -1,0 +1,90 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 0. Global Safety Net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- Helpers ---
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerified() {
+      return isSignedIn();
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // 2. Validation Blueprints
+    function isValidAudit(data) {
+      return data.name is string && data.name.size() > 0 && data.name.size() <= 200 &&
+             data.brand in ['Azafrán'] &&
+             data.userId == request.auth.uid &&
+             data.status in ['draft', 'completed'] &&
+             data.floorPrice is number && data.floorPrice >= 0 &&
+             data.suggestedPrice is number && data.suggestedPrice >= 0 &&
+             data.profitMargin is number && data.profitMargin >= 0 &&
+             // Timestamps (Accept numbers since App uses Date.now())
+             data.createdAt is number && data.updatedAt is number &&
+             // Collections/Lists
+             data.get('materials', []) is list &&
+             data.get('labor', []) is list &&
+             data.get('indirectCosts', []) is list &&
+             data.get('extras', []) is list &&
+             // Totals
+             data.get('totalMaterialsCost', 0) is number &&
+             data.get('totalLaborCost', 0) is number &&
+             data.get('totalIndirectCosts', 0) is number &&
+             data.get('totalExtrasCost', 0) is number;
+    }
+
+    function isValidConfig(data) {
+      return data.fabricCosts is map &&
+             data.get('accessoryCosts', {}) is map &&
+             data.get('fixedExpenses', {}) is map &&
+             data.get('employees', {}) is map &&
+             data.baseLaborRate is number && data.baseLaborRate >= 0 &&
+             data.monthlyProductionEstimate is number && data.monthlyProductionEstimate > 0 &&
+             data.defaultProfitMargin is number && data.defaultProfitMargin > 0;
+    }
+
+    // --- Collection: Config ---
+    match /config/{configId} {
+      allow read: if isSignedIn() && isValidId(configId);
+      allow write: if isVerified() && isValidId(configId) && isValidConfig(incoming());
+    }
+
+    // --- Collection: Audits ---
+    match /audits/{auditId} {
+      allow get, delete: if isOwner(existing().userId) && isValidId(auditId);
+      allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
+
+      allow create: if isVerified() && 
+                      isValidId(auditId) && 
+                      isValidAudit(incoming());
+
+      allow update: if isVerified() && 
+                      isValidId(auditId) &&
+                      isOwner(existing().userId) &&
+                      isValidAudit(incoming()) &&
+                      incoming().userId == existing().userId &&
+                      incoming().createdAt == existing().createdAt;
+    }
+  }
+}
