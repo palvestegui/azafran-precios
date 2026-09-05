@@ -1,18 +1,41 @@
-export type Unit = 'm' | '100pack' | 'dozen' | 'unit' | 'spool' | 'service';
+export type Unit = 'm' | '100pack' | 'dozen' | 'unit' | 'spool' | 'service' | 'batch';
 export type PaymentPeriod = 'weekly' | 'fortnightly' | 'monthly' | 'bimonthly' | 'quarterly' | 'semiannually' | 'yearly';
-
-export interface Material {
-  id: string;
-  name: string;
-  category?: 'fabric' | 'other' | 'accessory';
-  unit: Unit;
-  pricePerUnit: number;
-  wastagePercentage?: number;
-}
 
 export interface ProductIngredient {
   materialId: string;
   quantity: number; 
+}
+
+export interface AccessoryBatchCalculation {
+  quantity: number;
+  batchesCount: number;
+  batchSize: number;
+  totalCost: number;
+  unitCost: number;
+  unitRetailPrice: number;
+  totalRetailPrice: number;
+  retailProfit: number;
+  unitWholesalePrice: number;
+  totalWholesalePrice: number;
+  wholesaleProfit: number;
+}
+
+export interface Material {
+  id: string;
+  name: string;
+  category?: 'fabric' | 'other' | 'accessory' | 'service';
+  unit: Unit;
+  pricePerUnit: number;
+  batchSize?: number;
+  wastagePercentage?: number;
+  originType?: 'bought' | 'manufactured';
+  extraCosts?: number;
+  ingredients?: ProductIngredient[];
+  isSoldSeparately?: boolean;
+  /** Optional custom retail margin (%) for accessories/services or fabric-level overrides */
+  retailMargin?: number;
+  /** Optional custom wholesale margin (%) for accessories/services or fabric-level overrides */
+  wholesaleMargin?: number;
 }
 
 export interface Product {

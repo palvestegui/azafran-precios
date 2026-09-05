@@ -2,16 +2,19 @@
   "entities": {
     "GlobalConfig": {
       "title": "Global Configuration",
-      "description": "System-wide costs for fabrics, overheads, employees and expenses.",
+      "description": "System-wide materials, products, regular expenses, daily expenses, staff, and profit margins.",
       "type": "object",
       "properties": {
-        "fabricCosts": { "type": "object" },
-        "accessoryCosts": { "type": "object" },
-        "fixedExpenses": { "type": "object" },
-        "employees": { "type": "object" },
-        "baseLaborRate": { "type": "number" },
-        "monthlyProductionEstimate": { "type": "number" }
-      }
+        "materials": { "type": "array" },
+        "products": { "type": "array" },
+        "regularPayments": { "type": "array" },
+        "dailyExpenses": { "type": "array" },
+        "staff": { "type": "array" },
+        "profitMargin": { "type": "number" },
+        "wholesaleMargin": { "type": "number" },
+        "productionCapacity": { "type": "number" }
+      },
+      "required": ["materials", "products", "regularPayments", "dailyExpenses", "staff", "profitMargin", "productionCapacity"]
     },
     "PricingAudit": {
       "title": "Pricing Audit",

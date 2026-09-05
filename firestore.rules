@@ -55,13 +55,14 @@ service cloud.firestore {
     }
 
     function isValidConfig(data) {
-      return data.fabricCosts is map &&
-             data.get('accessoryCosts', {}) is map &&
-             data.get('fixedExpenses', {}) is map &&
-             data.get('employees', {}) is map &&
-             data.baseLaborRate is number && data.baseLaborRate >= 0 &&
-             data.monthlyProductionEstimate is number && data.monthlyProductionEstimate > 0 &&
-             data.defaultProfitMargin is number && data.defaultProfitMargin > 0;
+      return data.materials is list &&
+             data.products is list &&
+             data.regularPayments is list &&
+             data.dailyExpenses is list &&
+             data.staff is list &&
+             data.productionCapacity is number && data.productionCapacity >= 0 &&
+             data.profitMargin is number && data.profitMargin >= 0 &&
+             (!('wholesaleMargin' in data) || (data.wholesaleMargin is number && data.wholesaleMargin >= 0));
     }
 
     // --- Collection: Config ---

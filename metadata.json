@@ -2,5 +2,7 @@
   "name": "Azafrán Precios",
   "description": "Professional pricing tool for Azafrán Chefwear garment protocols.",
   "requestFramePermissions": [],
-  "majorCapabilities": []
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
 }
