@@ -1,43 +1,51 @@
 import React from "react";
-import { Plus, Trash2 } from "lucide-react";
+import { Plus } from "lucide-react";
 import { GlobalConfig, Staff } from "../../types";
 import { calculateMonthlyStaff } from "../../utils/calculations";
+import { StaffCard } from "../staff/StaffCard";
 
-interface StaffViewProps {
+export interface StaffViewProps {
   config: GlobalConfig;
   onChange: (c: GlobalConfig) => void;
+  onNotify?: (text: string, type: "success" | "error" | "info") => void;
 }
 
-export function StaffView({ config, onChange }: StaffViewProps) {
+export function StaffView({ config, onChange, onNotify }: StaffViewProps) {
   const generateId = () =>
     crypto.randomUUID
       ? crypto.randomUUID()
       : Math.random().toString(36).substring(2, 9);
 
   const addStaff = () => {
+    const newEmployee: Staff = {
+      id: generateId(),
+      name: "Nuevo Trabajador",
+      role: "",
+      monthlySalary: 0,
+      count: 1,
+    };
+
     onChange({
       ...config,
-      staff: [
-        {
-          id: generateId(),
-          name: "Nuevo Trabajador",
-          role: "",
-          monthlySalary: 0,
-          count: 1,
-        },
-        ...config.staff,
-      ],
+      staff: [newEmployee, ...config.staff],
     });
+
+    onNotify?.("Se añadió un nuevo puesto a la planilla", "info");
   };
 
   const removeStaff = (id: string) => {
-    onChange({ ...config, staff: config.staff.filter((p) => p.id !== id) });
-  };
-
-  const updateStaff = (id: string, updates: Partial<Staff>) => {
+    const target = config.staff.find((p) => p.id === id);
     onChange({
       ...config,
-      staff: config.staff.map((p) => (p.id === id ? { ...p, ...updates } : p)),
+      staff: config.staff.filter((p) => p.id !== id),
+    });
+    onNotify?.(`"${target?.name || "Trabajador"}" eliminado`, "info");
+  };
+
+  const saveStaff = (updated: Staff) => {
+    onChange({
+      ...config,
+      staff: config.staff.map((p) => (p.id === updated.id ? updated : p)),
     });
   };
 
@@ -47,14 +55,17 @@ export function StaffView({ config, onChange }: StaffViewProps) {
     <div className="space-y-6 max-w-5xl">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4">
         <div>
-          <h2 className="text-2xl font-black italic">Planilla de Sueldos</h2>
+          <h2 className="text-2xl font-black italic text-white">
+            Planilla de Sueldos
+          </h2>
           <p className="text-stone-400 text-sm mt-1">
-            Registra al personal y cuánto se les paga mensualmente.
+            Registra al personal y cuánto se les paga mensualmente. Los cambios
+            en sueldos no alteran los costos unitarios hasta que sean confirmados.
           </p>
         </div>
-        <div className="bg-stone-900 border border-stone-800 p-4 px-8 rounded-2xl flex flex-col items-center">
+        <div className="bg-stone-900 border border-stone-800 p-4 px-8 rounded-2xl flex flex-col items-center shadow-lg">
           <div className="text-xs uppercase font-bold text-stone-500 tracking-widest text-center">
-            Gasto Salarial Mensual
+            Gasto Salarial Mensual Activo
           </div>
           <div className="text-3xl font-mono text-red-400 font-bold mt-1">
             Bs {totalMonthly.toFixed(2)}
@@ -63,89 +74,29 @@ export function StaffView({ config, onChange }: StaffViewProps) {
       </div>
 
       <button
+        type="button"
         onClick={addStaff}
-        className="w-full sm:w-auto bg-orange-500/10 text-orange-500 border border-orange-500/30 px-6 py-3 rounded-xl flex items-center justify-center gap-2 hover:bg-orange-500/20 font-mono text-xs uppercase tracking-widest font-bold"
+        className="w-full sm:w-auto bg-orange-500/10 text-orange-500 border border-orange-500/30 px-6 py-3 rounded-xl flex items-center justify-center gap-2 hover:bg-orange-500/20 font-mono text-xs uppercase tracking-widest font-bold transition-all active:scale-95 cursor-pointer"
       >
         <Plus className="w-4 h-4" /> Añadir Personal
       </button>
 
       <div className="grid gap-4">
         {config.staff.map((emp) => (
-          <div
+          <StaffCard
             key={emp.id}
-            className="bg-stone-900 border border-stone-800 rounded-xl p-4 flex flex-col md:flex-row items-start md:items-end gap-4"
-          >
-            <div className="w-full md:w-16 shrink-0">
-              <label className="text-xs uppercase font-bold tracking-widest text-stone-500 block mb-1">
-                Cant.
-              </label>
-              <input
-                type="number"
-                min={1}
-                value={emp.count}
-                onChange={(e) =>
-                  updateStaff(emp.id, { count: Number(e.target.value) })
-                }
-                className="bg-stone-950 border border-stone-800 text-orange-400 font-mono text-center text-lg font-black rounded p-1.5 focus:outline-none w-full"
-              />
-            </div>
-            <div className="flex-1 w-full">
-              <label className="text-xs uppercase font-bold tracking-widest text-stone-500 block mb-1">
-                Nombre / Título
-              </label>
-              <input
-                value={emp.name}
-                onChange={(e) => updateStaff(emp.id, { name: e.target.value })}
-                className="bg-stone-950 text-white font-bold text-base border-b border-transparent hover:border-stone-700 focus:border-orange-500 rounded p-2 focus:outline-none w-full"
-              />
-            </div>
-            <div className="flex-1 w-full hidden lg:block">
-              <label className="text-xs uppercase font-bold tracking-widest text-stone-500 block mb-1">
-                Cargo
-              </label>
-              <input
-                value={emp.role}
-                onChange={(e) => updateStaff(emp.id, { role: e.target.value })}
-                className="bg-stone-950 text-stone-300 text-sm border-b border-transparent hover:border-stone-700 focus:border-orange-500 rounded p-2 focus:outline-none w-full"
-              />
-            </div>
-            <div className="w-full md:w-32 shrink-0">
-              <label className="text-xs uppercase font-bold tracking-widest text-stone-500 block mb-1">
-                Sueldo x1 (Bs)
-              </label>
-              <input
-                type="number"
-                value={emp.monthlySalary}
-                onChange={(e) =>
-                  updateStaff(emp.id, {
-                    monthlySalary: Number(e.target.value),
-                  })
-                }
-                className="bg-stone-950 border border-stone-800 text-amber-400 font-mono text-sm rounded p-2 focus:outline-none w-full text-right"
-              />
-            </div>
-            <div className="w-full md:w-32 shrink-0 flex flex-col justify-end pb-2 text-right">
-              <span className="text-[10px] uppercase font-bold text-stone-600 block mb-1">
-                Total Fila
-              </span>
-              <span className="font-mono text-stone-300 font-bold">
-                Bs {(emp.monthlySalary * emp.count).toFixed(2)}
-              </span>
-            </div>
-            <button
-              onClick={() => removeStaff(emp.id)}
-              className="hidden md:block self-end p-2 text-stone-600 hover:text-red-500 shrink-0 mb-1"
-            >
-              <Trash2 className="w-4 h-4" />
-            </button>
-            <button
-              onClick={() => removeStaff(emp.id)}
-              className="w-full md:hidden py-2 bg-red-500/10 text-red-500 rounded-lg text-sm font-bold mt-2"
-            >
-              Eliminar
-            </button>
-          </div>
+            staff={emp}
+            onSave={saveStaff}
+            onRemove={removeStaff}
+            onNotify={onNotify}
+          />
         ))}
+        {config.staff.length === 0 && (
+          <div className="text-center py-12 bg-stone-900/30 border border-dashed border-stone-800 rounded-2xl text-stone-500 text-sm">
+            No hay personal registrado en planilla. Haz clic en "Añadir
+            Personal".
+          </div>
+        )}
       </div>
     </div>
   );

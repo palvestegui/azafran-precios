@@ -216,7 +216,7 @@ export const PricingMatrixView: React.FC<PricingMatrixViewProps> = ({
               2. Asignación Indirecta
             </span>
             <span>
-              Costo Fijo = (Pagos Fijos + Gastos Diarios + Planilla) / Capacidad ({config.productionCapacity} u/mes).
+              Costo Fijo = ((Pagos Fijos + Gastos Diarios + Planilla) / Capacidad ({config.productionCapacity} u/mes)) × Factor de Confección.
             </span>
           </div>
           <div className="p-2.5 rounded-lg bg-stone-950/40 border border-stone-800/40">

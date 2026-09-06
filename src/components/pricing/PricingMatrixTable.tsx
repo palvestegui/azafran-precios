@@ -122,6 +122,7 @@ export const PricingMatrixTable: React.FC<PricingMatrixTableProps> = ({
                             step="0.1"
                             min="0"
                             value={tempMeters}
+                            onWheel={(e) => e.currentTarget.blur()}
                             onChange={(e) => setTempMeters(e.target.value)}
                             onKeyDown={(e) => {
                               if (e.key === "Enter") saveMeters(prod.id);
@@ -187,10 +188,10 @@ export const PricingMatrixTable: React.FC<PricingMatrixTableProps> = ({
                       >
                         {!cell.isApplicable ? (
                           <div
-                            className="text-stone-600 select-none cursor-default font-mono text-sm py-1"
+                            className="text-stone-500/80 select-none cursor-default font-mono text-xs py-2 italic font-normal"
                             title={cell.reason || "No aplica"}
                           >
-                            —
+                            No aplica
                           </div>
                         ) : mode === "retail" ? (
                           <div className="flex flex-col items-center justify-center py-1">

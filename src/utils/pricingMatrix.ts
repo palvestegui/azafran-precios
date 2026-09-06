@@ -68,12 +68,11 @@ export function calculateMatrixCell(
   // 3. Check allowed fabrics filter
   if (
     product.allowedFabricIds &&
-    product.allowedFabricIds.length > 0 &&
     !product.allowedFabricIds.includes(fabric.id)
   ) {
     return {
       isApplicable: false,
-      reason: "Tela no permitida para este producto",
+      reason: "No aplica",
       fabricCost: 0,
       notionsCost: 0,
       overheadAllocation: 0,
@@ -98,6 +97,23 @@ export function calculateMatrixCell(
   );
   const notionsCost = Math.max(0, analysis.materialCost - fabricCost);
 
+  const override = product.variantOverrides?.[fabric.id];
+  const retailPrice =
+    override?.customRetailPrice !== undefined && override.customRetailPrice > 0
+      ? override.customRetailPrice
+      : analysis.recommendedPrice;
+  const wholesalePrice =
+    override?.customWholesalePrice !== undefined && override.customWholesalePrice > 0
+      ? override.customWholesalePrice
+      : analysis.recommendedWholesalePrice;
+
+  const retailProfit = retailPrice - analysis.costFloor;
+  const wholesaleProfit = wholesalePrice - analysis.costFloor;
+  const retailMargin =
+    retailPrice > 0 ? ((retailPrice - analysis.costFloor) / retailPrice) * 100 : 0;
+  const wholesaleMargin =
+    wholesalePrice > 0 ? ((wholesalePrice - analysis.costFloor) / wholesalePrice) * 100 : 0;
+
   return {
     isApplicable: true,
     fabricCost,
@@ -105,12 +121,12 @@ export function calculateMatrixCell(
     overheadAllocation: analysis.overheadAllocation,
     laborAllocation: analysis.laborAllocation,
     costFloor: analysis.costFloor,
-    retailPrice: analysis.recommendedPrice,
-    wholesalePrice: analysis.recommendedWholesalePrice,
-    retailMargin: analysis.appliedMargin,
-    wholesaleMargin: analysis.appliedWholesaleMargin,
-    retailProfit: analysis.profitPerUnit,
-    wholesaleProfit: analysis.wholesaleProfitPerUnit,
+    retailPrice,
+    wholesalePrice,
+    retailMargin,
+    wholesaleMargin,
+    retailProfit,
+    wholesaleProfit,
   };
 }
 
@@ -160,10 +176,10 @@ export function exportMatrixToCsv(
       const cell = calculateMatrixCell(prod, fabric, config);
       if (!cell.isApplicable) {
         if (mode === "combined") {
-          row.push("—");
-          row.push("—");
+          row.push("No aplica");
+          row.push("No aplica");
         } else {
-          row.push("—");
+          row.push("No aplica");
         }
       } else {
         if (mode === "combined") {

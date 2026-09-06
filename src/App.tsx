@@ -16,7 +16,7 @@ import {
   Briefcase,
   ChevronDown,
 } from "lucide-react";
-import { GlobalConfig } from "./types";
+import { GlobalConfig, Material } from "./types";
 import {
   getGlobalConfig,
   saveGlobalConfig,
@@ -117,6 +117,19 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    const handleWheel = () => {
+      if (
+        document.activeElement instanceof HTMLInputElement &&
+        document.activeElement.type === "number"
+      ) {
+        document.activeElement.blur();
+      }
+    };
+    window.addEventListener("wheel", handleWheel, { passive: true });
+    return () => window.removeEventListener("wheel", handleWheel);
+  }, []);
+
+  useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (u) => {
       setUser(u);
     });
@@ -165,8 +178,19 @@ export default function App() {
 
   const handleRestoreConfig = async (restored: GlobalConfig) => {
     await saveConfig(restored);
+    const telasCount = restored.materials.filter(
+      (m: Material) => m.category === "fabric"
+    ).length;
+    const insumosCount = restored.materials.filter(
+      (m: Material) => m.category === "other"
+    ).length;
+    const accesoriosCount = restored.materials.filter(
+      (m: Material) => m.category === "accessory" || m.category === "service"
+    ).length;
+    const productosCount = restored.products.length;
+
     setFeedback({
-      text: `¡Catálogo restaurado y sincronizado con éxito! (${restored.products.length} productos, ${restored.materials.length} materiales)`,
+      text: `¡Catálogo restaurado y sincronizado con éxito! (${telasCount} telas, ${insumosCount} insumos, ${accesoriosCount} accesorios, ${productosCount} productos)`,
       type: "success",
     });
   };
@@ -413,22 +437,47 @@ export default function App() {
               <PricingMatrixView config={config} onChange={saveConfig} />
             )}
             {view === "materials" && (
-              <MaterialsView config={config} onChange={saveConfig} />
+              <MaterialsView
+                config={config}
+                onChange={saveConfig}
+                onNotify={(text, type) => setFeedback({ text, type })}
+                onNavigate={setView}
+              />
             )}
             {view === "products" && (
-              <ProductsView config={config} onChange={saveConfig} />
+              <ProductsView
+                config={config}
+                onChange={saveConfig}
+                onNotify={(text, type) => setFeedback({ text, type })}
+              />
             )}
             {view === "regularPayments" && (
-              <RegularPaymentsView config={config} onChange={saveConfig} />
+              <RegularPaymentsView
+                config={config}
+                onChange={saveConfig}
+                onNotify={(text, type) => setFeedback({ text, type })}
+              />
             )}
             {view === "dailyExpenses" && (
-              <DailyExpensesView config={config} onChange={saveConfig} />
+              <DailyExpensesView
+                config={config}
+                onChange={saveConfig}
+                onNotify={(text, type) => setFeedback({ text, type })}
+              />
             )}
             {view === "staff" && (
-              <StaffView config={config} onChange={saveConfig} />
+              <StaffView
+                config={config}
+                onChange={saveConfig}
+                onNotify={(text, type) => setFeedback({ text, type })}
+              />
             )}
             {view === "profit" && (
-              <ProfitView config={config} onChange={saveConfig} />
+              <ProfitView
+                config={config}
+                onChange={saveConfig}
+                onNotify={(text, type) => setFeedback({ text, type })}
+              />
             )}
           </motion.div>
         </AnimatePresence>

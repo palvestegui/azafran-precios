@@ -1,16 +1,20 @@
 import React from "react";
 import { Trash2, X } from "lucide-react";
-import { Material, ProductIngredient, Unit } from "../../types";
+import { Material, ProductIngredient } from "../../types";
 import { getMaterialTrueCostPerUnit } from "../../utils/calculations";
 import { isUnit } from "../../utils/validation";
 import { AccessoryBatchSimulator } from "./AccessoryBatchSimulator";
+import { useDraftState } from "../../hooks/useDraftState";
+import { CardDraftFooter } from "../common/CardDraftFooter";
+import { cn } from "../../lib/utils";
 
-interface AccessoryCardProps {
+export interface AccessoryCardProps {
   key?: React.Key;
   mat: Material;
   materials: Material[];
   updateMaterial: (id: string, updates: Partial<Material>) => void;
   removeMaterial: (id: string) => void;
+  onNotify?: (text: string, type: "success" | "error" | "info") => void;
 }
 
 export function AccessoryCard({
@@ -18,8 +22,26 @@ export function AccessoryCard({
   materials,
   updateMaterial,
   removeMaterial,
+  onNotify,
 }: AccessoryCardProps) {
-  const isManufactured = mat.originType === "manufactured";
+  const {
+    draft,
+    isDirty,
+    updateField,
+    updateDraft,
+    commit,
+    discard,
+    statusMessage,
+  } = useDraftState<Material>(
+    mat,
+    (saved) => updateMaterial(mat.id, saved),
+    {
+      entityName: mat.name,
+      onNotify,
+    }
+  );
+
+  const isManufactured = draft.originType === "manufactured";
 
   const addIngredient = () => {
     const available = materials.filter(
@@ -29,52 +51,63 @@ export function AccessoryCard({
         m.category === "fabric" ||
         m.category === "service"
     );
-    if (available.length === 0) return alert("Primero registra materiales.");
+    if (available.length === 0) {
+      onNotify?.("Primero registra materiales para añadir a la receta.", "error");
+      return;
+    }
 
-    updateMaterial(mat.id, {
-      ingredients: [
-        ...(mat.ingredients || []),
-        { materialId: available[0].id, quantity: 1 },
-      ],
-    });
+    updateField("ingredients", [
+      ...(draft.ingredients || []),
+      { materialId: available[0].id, quantity: 1 },
+    ]);
   };
 
   const removeIngredient = (index: number) => {
-    const newIngs = [...(mat.ingredients || [])];
+    const newIngs = [...(draft.ingredients || [])];
     newIngs.splice(index, 1);
-    updateMaterial(mat.id, { ingredients: newIngs });
+    updateField("ingredients", newIngs);
   };
 
   const updateIngredient = (
     index: number,
     updates: Partial<ProductIngredient>
   ) => {
-    const newIngs = [...(mat.ingredients || [])];
+    const newIngs = [...(draft.ingredients || [])];
     newIngs[index] = { ...newIngs[index], ...updates };
-    updateMaterial(mat.id, { ingredients: newIngs });
+    updateField("ingredients", newIngs);
   };
 
-  const trueCost = getMaterialTrueCostPerUnit(mat, materials);
+  const trueCost = getMaterialTrueCostPerUnit(draft, materials);
 
   return (
-    <div className="bg-stone-900 border border-stone-800 p-4 rounded-2xl flex flex-col gap-3 group relative">
+    <div
+      className={cn(
+        "bg-stone-900 border p-4 rounded-2xl flex flex-col gap-3 group relative transition-all duration-200",
+        isDirty
+          ? "border-amber-500/50 shadow-lg shadow-amber-500/5"
+          : "border-stone-800 hover:border-stone-700"
+      )}
+    >
       <button
-        onClick={() => removeMaterial(mat.id)}
-        className="absolute top-4 right-4 text-stone-600 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity z-10"
+        type="button"
+        onClick={() => removeMaterial(draft.id)}
+        className="absolute top-4 right-4 text-stone-600 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity z-10 p-1"
+        title="Eliminar accesorio"
       >
         <Trash2 className="w-4 h-4" />
       </button>
 
       <input
-        value={mat.name}
-        onChange={(e) => updateMaterial(mat.id, { name: e.target.value })}
+        value={draft.name}
+        onChange={(e) => updateField("name", e.target.value)}
         className="bg-transparent text-white font-bold text-lg border-b border-transparent hover:border-stone-700 focus:border-orange-500 focus:outline-none w-[90%]"
         placeholder="Nombre Accesorio"
       />
 
       <div className="flex bg-stone-950 rounded-lg p-1">
         <button
-          onClick={() => updateMaterial(mat.id, { originType: "bought" })}
+          type="button"
+          onClick={() => updateField("originType", "bought")}
           className={`flex-1 text-[10px] font-bold uppercase py-1.5 rounded-md transition-colors ${
             !isManufactured
               ? "bg-orange-500 text-white"
@@ -84,9 +117,8 @@ export function AccessoryCard({
           Comprado
         </button>
         <button
-          onClick={() =>
-            updateMaterial(mat.id, { originType: "manufactured" })
-          }
+          type="button"
+          onClick={() => updateField("originType", "manufactured")}
           className={`flex-1 text-[10px] font-bold uppercase py-1.5 rounded-md transition-colors ${
             isManufactured
               ? "bg-orange-500 text-white"
@@ -105,11 +137,11 @@ export function AccessoryCard({
                 Unidad
               </label>
               <select
-                value={mat.unit}
+                value={draft.unit}
                 onChange={(e) => {
                   const val = e.target.value;
                   if (isUnit(val)) {
-                    updateMaterial(mat.id, { unit: val });
+                    updateField("unit", val);
                   }
                 }}
                 className="w-full bg-stone-950 border border-stone-800 rounded-lg p-2 text-sm text-white focus:outline-none"
@@ -129,17 +161,18 @@ export function AccessoryCard({
               </label>
               <input
                 type="number"
-                value={mat.pricePerUnit}
+                min="0"
+                step="0.01"
+                value={draft.pricePerUnit}
+                onWheel={(e) => e.currentTarget.blur()}
                 onChange={(e) =>
-                  updateMaterial(mat.id, {
-                    pricePerUnit: Number(e.target.value),
-                  })
+                  updateField("pricePerUnit", Number(e.target.value))
                 }
                 className="w-full bg-stone-950 border border-stone-800 rounded-lg p-2 text-sm font-mono text-orange-400 focus:outline-none text-right"
               />
             </div>
           </div>
-          {mat.unit === "batch" && (
+          {draft.unit === "batch" && (
             <div className="space-y-1 bg-orange-500/10 p-2 rounded-lg border border-orange-500/20">
               <label className="text-[11px] uppercase font-bold tracking-widest text-orange-500">
                 Unidades por Lote
@@ -148,11 +181,11 @@ export function AccessoryCard({
                 <span className="text-xs text-stone-400">1 Lote =</span>
                 <input
                   type="number"
-                  value={mat.batchSize || 1}
+                  min="1"
+                  value={draft.batchSize || 1}
+                  onWheel={(e) => e.currentTarget.blur()}
                   onChange={(e) =>
-                    updateMaterial(mat.id, {
-                      batchSize: Number(e.target.value),
-                    })
+                    updateField("batchSize", Math.max(1, Number(e.target.value)))
                   }
                   className="flex-1 bg-stone-950 border border-stone-800 rounded-lg p-1.5 text-sm font-mono text-white focus:outline-none text-right"
                   placeholder="Ej: 6"
@@ -171,6 +204,7 @@ export function AccessoryCard({
               Insumos (Receta)
             </span>
             <button
+              type="button"
               onClick={addIngredient}
               className="text-[10px] bg-stone-800 text-stone-300 px-2 py-1 rounded font-bold hover:bg-stone-700"
             >
@@ -178,7 +212,7 @@ export function AccessoryCard({
             </button>
           </div>
           <div className="space-y-2">
-            {(mat.ingredients || []).map((ing, i) => {
+            {(draft.ingredients || []).map((ing, i) => {
               const available = materials.filter((m) => m.category !== "fabric");
               const currentIng = materials.find((m) => m.id === ing.materialId);
               let qtyLabel = "Cant.";
@@ -219,7 +253,10 @@ export function AccessoryCard({
                     </label>
                     <input
                       type="number"
+                      min="0"
+                      step="0.1"
                       value={ing.quantity}
+                      onWheel={(e) => e.currentTarget.blur()}
                       onChange={(e) =>
                         updateIngredient(i, {
                           quantity: Number(e.target.value),
@@ -229,6 +266,7 @@ export function AccessoryCard({
                     />
                   </div>
                   <button
+                    type="button"
                     onClick={() => removeIngredient(i)}
                     className="text-stone-500 hover:text-red-500 pb-2"
                   >
@@ -251,9 +289,12 @@ export function AccessoryCard({
           </label>
           <input
             type="number"
-            value={mat.extraCosts || 0}
+            min="0"
+            step="0.1"
+            value={draft.extraCosts || 0}
+            onWheel={(e) => e.currentTarget.blur()}
             onChange={(e) =>
-              updateMaterial(mat.id, { extraCosts: Number(e.target.value) })
+              updateField("extraCosts", Number(e.target.value))
             }
             className="w-full bg-stone-950 border border-stone-800 rounded-lg p-2 text-sm font-mono text-stone-300 focus:outline-none text-right"
           />
@@ -274,17 +315,18 @@ export function AccessoryCard({
             <label className="text-[10px] uppercase font-bold tracking-widest text-stone-500">
               Margen Menor (%)
             </label>
-            {mat.retailMargin === undefined && (
+            {draft.retailMargin === undefined && (
               <span className="text-[9px] text-stone-500 italic">Defecto 35%</span>
             )}
           </div>
           <input
             type="number"
-            value={mat.retailMargin !== undefined ? mat.retailMargin : ""}
+            value={draft.retailMargin !== undefined ? draft.retailMargin : ""}
             placeholder="35"
+            onWheel={(e) => e.currentTarget.blur()}
             onChange={(e) => {
               const val = e.target.value.trim();
-              updateMaterial(mat.id, {
+              updateDraft({
                 retailMargin: val === "" ? undefined : Number(val),
               });
             }}
@@ -296,17 +338,20 @@ export function AccessoryCard({
             <label className="text-[10px] uppercase font-bold tracking-widest text-stone-500">
               Margen Mayor (%)
             </label>
-            {mat.wholesaleMargin === undefined && (
+            {draft.wholesaleMargin === undefined && (
               <span className="text-[9px] text-stone-500 italic">Defecto 20%</span>
             )}
           </div>
           <input
             type="number"
-            value={mat.wholesaleMargin !== undefined ? mat.wholesaleMargin : ""}
+            value={
+              draft.wholesaleMargin !== undefined ? draft.wholesaleMargin : ""
+            }
             placeholder="20"
+            onWheel={(e) => e.currentTarget.blur()}
             onChange={(e) => {
               const val = e.target.value.trim();
-              updateMaterial(mat.id, {
+              updateDraft({
                 wholesaleMargin: val === "" ? undefined : Number(val),
               });
             }}
@@ -318,22 +363,30 @@ export function AccessoryCard({
       <div className="mt-1 flex items-center gap-2">
         <input
           type="checkbox"
-          checked={mat.isSoldSeparately || false}
+          checked={draft.isSoldSeparately || false}
           onChange={(e) =>
-            updateMaterial(mat.id, { isSoldSeparately: e.target.checked })
+            updateField("isSoldSeparately", e.target.checked)
           }
           className="accent-orange-500"
-          id={`sold-${mat.id}`}
+          id={`sold-${draft.id}`}
         />
         <label
-          htmlFor={`sold-${mat.id}`}
+          htmlFor={`sold-${draft.id}`}
           className="text-xs font-bold text-stone-400 cursor-pointer"
         >
           Se vende por separado (Producto independiente)
         </label>
       </div>
 
-      <AccessoryBatchSimulator mat={mat} materials={materials} />
+      <AccessoryBatchSimulator mat={draft} materials={materials} />
+
+      <CardDraftFooter
+        isDirty={isDirty}
+        onSave={commit}
+        onDiscard={discard}
+        statusMessage={statusMessage}
+        compact
+      />
     </div>
   );
 }

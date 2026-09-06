@@ -7,6 +7,7 @@ import {
   Staff,
   Unit,
   PaymentPeriod,
+  VariantPriceOverride,
 } from "../types";
 import { DEFAULT_GLOBAL_CONFIG } from "../data/defaultCatalog";
 
@@ -163,6 +164,11 @@ export function validateProduct(raw: unknown): Product | null {
     prod.allowedFabricIds = raw.allowedFabricIds
       .map((fid) => sanitizeString(fid))
       .filter(Boolean);
+  } else {
+    const fallbackProd = DEFAULT_GLOBAL_CONFIG.products?.find((p) => p.id === id);
+    if (fallbackProd?.allowedFabricIds && fallbackProd.allowedFabricIds.length > 0) {
+      prod.allowedFabricIds = [...fallbackProd.allowedFabricIds];
+    }
   }
   if (typeof raw.profitMargin === "number" && !isNaN(raw.profitMargin) && isFinite(raw.profitMargin)) {
     prod.profitMargin = raw.profitMargin;
@@ -180,6 +186,32 @@ export function validateProduct(raw: unknown): Product | null {
     if (!isNaN(parsed) && isFinite(parsed)) {
       prod.wholesaleMargin = parsed;
     }
+  }
+
+  if (typeof raw.productionWeight === "number" && !isNaN(raw.productionWeight) && raw.productionWeight > 0) {
+    prod.productionWeight = raw.productionWeight;
+  } else if (typeof raw.productionWeight === "string" && raw.productionWeight.trim() !== "") {
+    const parsed = parseFloat(raw.productionWeight);
+    prod.productionWeight = !isNaN(parsed) && parsed > 0 ? parsed : 1.0;
+  } else {
+    const fallbackProd = DEFAULT_GLOBAL_CONFIG.products?.find((p) => p.id === id);
+    prod.productionWeight = fallbackProd?.productionWeight && fallbackProd.productionWeight > 0 ? fallbackProd.productionWeight : 1.0;
+  }
+
+  if (isRecord(raw.variantOverrides)) {
+    const validOverrides: Record<string, VariantPriceOverride> = {};
+    for (const [fabricId, val] of Object.entries(raw.variantOverrides)) {
+      if (!isRecord(val)) continue;
+      const r = sanitizeNumber(val.customRetailPrice, -1);
+      const w = sanitizeNumber(val.customWholesalePrice, -1);
+      const entry: VariantPriceOverride = {};
+      if (r >= 0) entry.customRetailPrice = r;
+      if (w >= 0) entry.customWholesalePrice = w;
+      if (entry.customRetailPrice !== undefined || entry.customWholesalePrice !== undefined) {
+        validOverrides[sanitizeString(fabricId)] = entry;
+      }
+    }
+    if (Object.keys(validOverrides).length > 0) prod.variantOverrides = validOverrides;
   }
 
   return prod;

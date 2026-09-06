@@ -223,6 +223,7 @@ export function AccessoryConfigCard({
             type="number"
             min="1"
             value={quantity}
+            onWheel={(e) => e.currentTarget.blur()}
             onChange={(e) =>
               onUpdateQuantity(accessory.id, parseInt(e.target.value) || 1)
             }

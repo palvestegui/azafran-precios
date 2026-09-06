@@ -38,6 +38,11 @@ export interface Material {
   wholesaleMargin?: number;
 }
 
+export interface VariantPriceOverride {
+  customRetailPrice?: number;
+  customWholesalePrice?: number;
+}
+
 export interface Product {
   id: string;
   name: string;
@@ -47,6 +52,16 @@ export interface Product {
   ingredients: ProductIngredient[];
   profitMargin?: number;
   wholesaleMargin?: number;
+  /**
+   * Relative workshop effort/time factor compared to a base garment (Filipina = 1.0).
+   * Scales allocated workshop overhead and labor.
+   * Default fallback: 1.0 (e.g., Filipina = 1.0, Pantalón = 0.8, Mandil = 0.5, Gorro = 0.25).
+   */
+  productionWeight?: number;
+  /**
+   * Variant price overrides keyed by fabric/material ID.
+   */
+  variantOverrides?: Record<string, VariantPriceOverride>;
 }
 
 export interface Expense {

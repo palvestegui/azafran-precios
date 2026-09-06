@@ -56,6 +56,7 @@ export function MarginCalculatorCard({
                   ? customRetailPrice
                   : recommendedPrice.toFixed(2)
               }
+              onWheel={(e) => e.currentTarget.blur()}
               onChange={(e) => setCustomRetailPrice(e.target.value)}
               className="w-full text-center text-2xl font-bold text-white focus:outline-none focus:border-b-2 focus:border-orange-500 bg-transparent transition-colors"
             />
@@ -104,6 +105,7 @@ export function MarginCalculatorCard({
                   ? customWholesalePrice
                   : recommendedWholesalePrice.toFixed(2)
               }
+              onWheel={(e) => e.currentTarget.blur()}
               onChange={(e) => setCustomWholesalePrice(e.target.value)}
               className="w-full text-center text-2xl font-bold text-white focus:outline-none focus:border-b-2 focus:border-orange-500 bg-transparent transition-colors"
             />

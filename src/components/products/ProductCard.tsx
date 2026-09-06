@@ -7,28 +7,25 @@ import {
   AlertCircle,
   X,
 } from "lucide-react";
-import { GlobalConfig, Product, ProductIngredient } from "../../types";
+import { GlobalConfig, Product, VariantPriceOverride } from "../../types";
 import {
-  calculateProductAnalysis,
   getMaterialCost,
   getMaterialTrueCostPerUnit,
 } from "../../utils/calculations";
 import { cn } from "../../lib/utils";
+import { useProductDraft } from "../../hooks/useProductDraft";
+import { ProductFabricPricingTable } from "./ProductFabricPricingTable";
+import { ProductDraftFooter } from "./ProductDraftFooter";
 
-interface ProductCardProps {
+export interface ProductCardProps {
   key?: React.Key;
   prod: Product;
   config: GlobalConfig;
   isExpanded: boolean;
   onToggleExpand: () => void;
-  onUpdateProduct: (updates: Partial<Product>) => void;
+  onSaveProduct: (savedProduct: Product) => void;
   onRemoveProduct: () => void;
-  onAddIngredient: (category: "fabric" | "other" | "accessory") => void;
-  onUpdateIngredient: (
-    index: number,
-    updates: Partial<ProductIngredient>
-  ) => void;
-  onRemoveIngredient: (index: number) => void;
+  onNotify?: (text: string, type: "success" | "error") => void;
 }
 
 export function ProductCard({
@@ -36,16 +33,57 @@ export function ProductCard({
   config,
   isExpanded,
   onToggleExpand,
-  onUpdateProduct,
+  onSaveProduct,
   onRemoveProduct,
-  onAddIngredient,
-  onUpdateIngredient,
-  onRemoveIngredient,
+  onNotify,
 }: ProductCardProps) {
   const [expandedTable, setExpandedTable] = useState(false);
 
+  const {
+    draftProduct,
+    isDirty,
+    updateDraft,
+    addIngredient,
+    updateIngredient,
+    removeIngredient,
+    saveDraft,
+    discardDraft,
+    statusMessage,
+  } = useProductDraft({
+    product: prod,
+    onSaveProduct,
+    onNotify,
+  });
+
+  const handleUpdateOverride = (
+    fabricId: string,
+    override: VariantPriceOverride | null
+  ) => {
+    const current = { ...(draftProduct.variantOverrides || {}) };
+    if (
+      !override ||
+      (override.customRetailPrice === undefined &&
+        override.customWholesalePrice === undefined)
+    ) {
+      delete current[fabricId];
+    } else {
+      current[fabricId] = override;
+    }
+    updateDraft({
+      variantOverrides:
+        Object.keys(current).length > 0 ? current : undefined,
+    });
+  };
+
   return (
-    <div className="bg-stone-900 border border-stone-800 rounded-3xl relative group overflow-hidden">
+    <div
+      className={cn(
+        "bg-stone-900 border rounded-3xl relative group overflow-hidden transition-all duration-200",
+        isDirty
+          ? "border-amber-500/50 shadow-lg shadow-amber-500/5 ring-1 ring-amber-500/20"
+          : "border-stone-800"
+      )}
+    >
       <div className="absolute top-0 right-0 w-32 h-32 bg-orange-500/5 rounded-full blur-3xl -mr-10 -mt-10 pointer-events-none" />
 
       <div className="relative z-10">
@@ -54,15 +92,24 @@ export function ProductCard({
           className="flex justify-between items-center p-6 cursor-pointer hover:bg-stone-800/30 transition-colors"
           onClick={onToggleExpand}
         >
-          <div className="flex-1" onClick={(e) => e.stopPropagation()}>
+          <div
+            className="flex-1 flex flex-wrap items-center gap-3 pr-2"
+            onClick={(e) => e.stopPropagation()}
+          >
             <input
-              value={prod.name}
-              onChange={(e) => onUpdateProduct({ name: e.target.value })}
-              className="bg-transparent text-white font-black italic text-3xl border-b-2 border-transparent hover:border-stone-700 focus:border-orange-500 focus:outline-none w-full max-w-md"
+              value={draftProduct.name}
+              onChange={(e) => updateDraft({ name: e.target.value })}
+              className="bg-transparent text-white font-black italic text-3xl border-b-2 border-transparent hover:border-stone-700 focus:border-orange-500 focus:outline-none w-full max-w-md transition-colors"
               placeholder="Nombre del Producto"
             />
+            {isDirty && (
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-mono font-bold bg-amber-500/10 border border-amber-500/30 text-amber-400 shrink-0 animate-pulse">
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                Borrador con cambios
+              </span>
+            )}
           </div>
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3">
             <button
               onClick={(e) => {
                 e.stopPropagation();
@@ -92,6 +139,42 @@ export function ProductCard({
               className="overflow-hidden"
             >
               <div className="p-6 pt-0 space-y-8">
+                {/* WORKSHOP EFFORT / FACTOR DE CONFECCIÓN */}
+                <div className="space-y-3 bg-stone-950 p-4 rounded-2xl border border-stone-800">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div className="flex-1">
+                      <label
+                        htmlFor={`production-weight-${draftProduct.id}`}
+                        className="text-xs uppercase font-bold text-orange-500 block tracking-wide"
+                      >
+                        Factor de Confección / Equivalencia de Esfuerzo
+                      </label>
+                      <p className="text-[11px] text-stone-400 mt-0.5 leading-relaxed">
+                        Proporción de tiempo frente a una Filipina (1.0 = Filipina, 0.5 = Mandil, 0.25 = Gorro).
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <input
+                        id={`production-weight-${draftProduct.id}`}
+                        type="number"
+                        step="0.05"
+                        min="0.1"
+                        max="3.0"
+                        value={draftProduct.productionWeight ?? 1.0}
+                        onWheel={(e) => e.currentTarget.blur()}
+                        onChange={(e) => {
+                          const val = parseFloat(e.target.value);
+                          updateDraft({
+                            productionWeight: isNaN(val) ? 1.0 : val,
+                          });
+                        }}
+                        className="w-28 bg-stone-900 border border-stone-700 rounded-lg p-2 text-sm font-mono text-orange-400 text-right focus:outline-none focus:border-orange-500"
+                      />
+                      <span className="text-xs font-mono text-stone-500">× esfuerzo</span>
+                    </div>
+                  </div>
+                </div>
+
                 {/* FABRICS SECTION */}
                 <div className="space-y-4">
                   <div className="flex justify-between items-center border-b border-stone-800 pb-2">
@@ -110,9 +193,9 @@ export function ProductCard({
                         Tela Principal
                       </label>
                       <select
-                        value={prod.defaultFabricId || ""}
+                        value={draftProduct.defaultFabricId || ""}
                         onChange={(e) =>
-                          onUpdateProduct({
+                          updateDraft({
                             defaultFabricId: e.target.value,
                           })
                         }
@@ -134,9 +217,10 @@ export function ProductCard({
                       </label>
                       <input
                         type="number"
-                        value={prod.fabricQuantity || 0}
+                        value={draftProduct.fabricQuantity || 0}
+                        onWheel={(e) => e.currentTarget.blur()}
                         onChange={(e) =>
-                          onUpdateProduct({
+                          updateDraft({
                             fabricQuantity: Number(e.target.value),
                           })
                         }
@@ -151,15 +235,16 @@ export function ProductCard({
                         {config.materials
                           .filter((m) => m.category === "fabric")
                           .map((mat) => {
-                            const isAllowed = prod.allowedFabricIds
-                              ? prod.allowedFabricIds.includes(mat.id)
+                            const isAllowed = draftProduct.allowedFabricIds
+                              ? draftProduct.allowedFabricIds.includes(mat.id)
                               : true;
                             return (
                               <button
                                 key={mat.id}
+                                type="button"
                                 onClick={() => {
                                   let newIds =
-                                    prod.allowedFabricIds ||
+                                    draftProduct.allowedFabricIds ||
                                     config.materials
                                       .filter((m) => m.category === "fabric")
                                       .map((m) => m.id);
@@ -170,7 +255,7 @@ export function ProductCard({
                                   } else {
                                     newIds = [...newIds, mat.id];
                                   }
-                                  onUpdateProduct({
+                                  updateDraft({
                                     allowedFabricIds: newIds,
                                   });
                                 }}
@@ -204,13 +289,14 @@ export function ProductCard({
                       Insumos
                     </h4>
                     <button
-                      onClick={() => onAddIngredient("other")}
+                      type="button"
+                      onClick={() => addIngredient("other", config.materials)}
                       className="text-orange-500 hover:text-orange-400 bg-orange-500/10 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors"
                     >
                       + Añadir Insumo
                     </button>
                   </div>
-                  {prod.ingredients.filter((ing) => {
+                  {draftProduct.ingredients.filter((ing) => {
                     const m = config.materials.find(
                       (mat) => mat.id === ing.materialId
                     );
@@ -223,7 +309,7 @@ export function ProductCard({
                     </p>
                   )}
                   <div className="space-y-2">
-                    {prod.ingredients.map((ing, i) => {
+                    {draftProduct.ingredients.map((ing, i) => {
                       const m = config.materials.find(
                         (mat) => mat.id === ing.materialId
                       );
@@ -238,7 +324,7 @@ export function ProductCard({
                           mat.category === "accessory"
                       );
                       const mat = config.materials.find(
-                        (m) => m.id === ing.materialId
+                        (item) => item.id === ing.materialId
                       );
                       const cost = getMaterialCost(
                         mat,
@@ -267,24 +353,24 @@ export function ProductCard({
                             <select
                               value={ing.materialId}
                               onChange={(e) =>
-                                onUpdateIngredient(i, {
+                                updateIngredient(i, {
                                   materialId: e.target.value,
                                 })
                               }
                               className="w-full bg-stone-900 border border-stone-700 rounded-lg p-2 text-sm text-white focus:outline-none"
                             >
-                              {availableMaterials.map((m) => {
+                              {availableMaterials.map((item) => {
                                 const tCost = getMaterialTrueCostPerUnit(
-                                  m,
+                                  item,
                                   config.materials
                                 );
                                 const unitLabel =
-                                  m.unit === "batch"
-                                    ? `Lote (${m.batchSize || 1} u)`
-                                    : m.unit;
+                                  item.unit === "batch"
+                                    ? `Lote (${item.batchSize || 1} u)`
+                                    : item.unit;
                                 return (
-                                  <option key={m.id} value={m.id}>
-                                    {m.name} (Bs {tCost.toFixed(2)} / {unitLabel})
+                                  <option key={item.id} value={item.id}>
+                                    {item.name} (Bs {tCost.toFixed(2)} / {unitLabel})
                                   </option>
                                 );
                               })}
@@ -297,8 +383,9 @@ export function ProductCard({
                             <input
                               type="number"
                               value={ing.quantity}
+                              onWheel={(e) => e.currentTarget.blur()}
                               onChange={(e) =>
-                                onUpdateIngredient(i, {
+                                updateIngredient(i, {
                                   quantity: Number(e.target.value),
                                 })
                               }
@@ -314,7 +401,8 @@ export function ProductCard({
                             </div>
                           </div>
                           <button
-                            onClick={() => onRemoveIngredient(i)}
+                            type="button"
+                            onClick={() => removeIngredient(i)}
                             className="text-stone-600 hover:text-red-500 p-2"
                           >
                             <X className="w-4 h-4" />
@@ -326,91 +414,21 @@ export function ProductCard({
                 </div>
 
                 {/* TABLA COMPARATIVA DE TELAS */}
-                <div className="mt-8 bg-stone-950 rounded-2xl border border-stone-800 overflow-hidden">
-                  <button
-                    onClick={() => setExpandedTable((prev) => !prev)}
-                    className="w-full flex justify-between items-center p-4 px-6 hover:bg-stone-800/50 transition-colors"
-                  >
-                    <h4 className="font-bold text-emerald-500 text-sm uppercase tracking-widest">
-                      Precios Finales por Tela
-                    </h4>
-                    {expandedTable ? (
-                      <ChevronUp className="w-4 h-4 text-emerald-500" />
-                    ) : (
-                      <ChevronDown className="w-4 h-4 text-emerald-500" />
-                    )}
-                  </button>
+                <ProductFabricPricingTable
+                  product={draftProduct}
+                  config={config}
+                  expandedTable={expandedTable}
+                  onToggleTable={() => setExpandedTable((prev) => !prev)}
+                  onUpdateOverride={handleUpdateOverride}
+                />
 
-                  <AnimatePresence>
-                    {expandedTable && (
-                      <motion.div
-                        initial={{ height: 0, opacity: 0 }}
-                        animate={{ height: "auto", opacity: 1 }}
-                        exit={{ height: 0, opacity: 0 }}
-                        className="overflow-hidden"
-                      >
-                        <div className="p-6 pt-2 border-t border-stone-800/50">
-                          <div className="overflow-x-auto">
-                            <table className="w-full text-left border-collapse text-sm">
-                              <thead>
-                                <tr className="border-b border-stone-800 text-stone-500 font-mono text-[10px] uppercase tracking-widest">
-                                  <th className="pb-2 font-bold min-w-[120px]">
-                                    Variante (Tela)
-                                  </th>
-                                  <th className="pb-2 font-bold text-right min-w-[80px]">
-                                    Costo Total
-                                  </th>
-                                  <th className="pb-2 font-bold text-right text-orange-400 min-w-[100px]">
-                                    Precio Menor
-                                  </th>
-                                  <th className="pb-2 font-bold text-right text-emerald-400 min-w-[100px]">
-                                    Precio Mayor
-                                  </th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {config.materials
-                                  .filter((m) => m.category === "fabric")
-                                  .map((fabric) => {
-                                    const fAnalysis = calculateProductAnalysis(
-                                      prod,
-                                      config,
-                                      fabric.id
-                                    );
-                                    return (
-                                      <tr
-                                        key={fabric.id}
-                                        className="border-b border-stone-800/50 hover:bg-stone-800/20"
-                                      >
-                                        <td className="py-3 text-white font-bold">
-                                          {fabric.name}
-                                        </td>
-                                        <td className="py-3 font-mono text-right text-stone-400">
-                                          Bs {fAnalysis.costFloor.toFixed(2)}
-                                        </td>
-                                        <td className="py-3 font-mono text-right text-orange-400 font-bold">
-                                          Bs{" "}
-                                          {fAnalysis.recommendedPrice.toFixed(
-                                            2
-                                          )}
-                                        </td>
-                                        <td className="py-3 font-mono text-right text-emerald-400 font-bold">
-                                          Bs{" "}
-                                          {fAnalysis.recommendedWholesalePrice.toFixed(
-                                            2
-                                          )}
-                                        </td>
-                                      </tr>
-                                    );
-                                  })}
-                              </tbody>
-                            </table>
-                          </div>
-                        </div>
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
-                </div>
+                {/* STICKY ACTION FOOTER / GUARDAR / DESCARTAR */}
+                <ProductDraftFooter
+                  isDirty={isDirty}
+                  statusMessage={statusMessage}
+                  onDiscard={discardDraft}
+                  onSave={saveDraft}
+                />
               </div>
             </motion.div>
           )}

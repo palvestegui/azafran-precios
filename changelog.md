@@ -1,5 +1,232 @@
 # Changelog
 
+## [Unreleased] - 2026-09-05
+
+### Two-Way Variant Pricing Overrides, Cross-Catalog Margin Sentinel Alert, and Action Bar Layout Collision Fix
+- **What failed / Business problem**:
+  - *Pricing vs. Margin Inflexibility*: Market-driven garments command higher selling prices on affordable fabrics (e.g. Pantalón in Gabardina can retail for Bs 139 despite cost-plus formula calculating Bs 102). Raising global or product margins distorted other garments across the catalog. There was no mechanism to set live selling price overrides and visualize the exact resulting profit margin and net profit in Bolivianos.
+  - *Silent Negative Margins (Inflation Risk)*: In volatile textile markets, whenever a fabric's cost per meter was updated in `MaterialCard`, existing fixed selling prices were at risk of silently slipping into negative profit margins (selling at a loss) without warning.
+  - *CSS Layout Collision*: In `MaterialCard.tsx` and compact footers, the text "Descartar" and "Guardar Cambios" visually overlapped (`✓ GuardDescartar`) due to insufficient flexbox gap and missing `whitespace-nowrap` / `shrink-0` safeguards on smaller card widths.
+- **Why it failed**:
+  - The `Product` data model only supported uniform markup percentage formulas without variant-specific price overrides.
+  - No automated cross-catalog audit mechanism existed when saving material price adjustments.
+  - Footer flexbox children lacked explicit word-wrap and shrinking boundary rules.
+- **How root architecture was adapted**:
+  - **Data Model & Validation Extension (`src/types.ts`, `src/utils/validation.ts`)**:
+    - Defined `VariantPriceOverride` interface (`customRetailPrice?: number; customWholesalePrice?: number`).
+    - Extended `Product` interface with optional `variantOverrides?: Record<string, VariantPriceOverride>` keyed by `fabricId`.
+    - Added comprehensive validation and sanitization in `validateProduct` in `src/utils/validation.ts`, ensuring invalid numbers are filtered out.
+  - **Two-Way Calculation Engine (`src/components/products/ProductFabricPricingTable.tsx`)**:
+    - Redesigned the "Precios Finales por Tela" table with responsive numeric inputs for **Precio Menor** and **Precio Mayor**.
+    - Injected formula-derived fallback placeholders when no custom override is specified.
+    - Integrated live two-way mathematical badges:
+      - `realMargin = ((effectivePrice - totalCost) / effectivePrice) * 100`
+      - `netProfit = effectivePrice - totalCost`
+      - Color-coded: emerald for healthy margins (>= 10%), amber for critical margins (< 10%), and pulsing red with warning alert for negative margins (< 0%).
+    - Added inline reset actions (`RotateCcw`) to easily revert custom overrides back to mathematical formula prices.
+    - Added `onWheel={(e) => e.currentTarget.blur()}` across inputs to eliminate accidental scroll mutations.
+  - **Cross-Catalog Margin Sentinel Audit (`src/utils/marginSentinel.ts`)**:
+    - Created dedicated, strongly-typed audit utility (148 lines, Rule 300 compliant).
+    - `checkMaterialPriceImpact(updatedMaterial, config)` simulates updated material unit costs across all products and variants.
+    - Accurately audits garments with custom overrides and flags any item with negative margin (critical) or margin < 10% (warning).
+  - **Sentinel Alert Modal (`src/components/materials/MarginSentinelModal.tsx`, `src/components/views/MaterialsView.tsx`)**:
+    - Created high-contrast alert dialog (204 lines, Rule 500 compliant) that triggers upon saving a material if negative margins are detected.
+    - Details the garment name, fabric variant, sale type (Retail vs. Wholesale), cost delta (`Bs Old → Bs New`), current fixed price, and unit deficit.
+    - Offers action buttons: "Entendido / Continuar" and "Ver Prenda Afectada" (seamlessly transitioning to Products view).
+  - **Action Bar Collision Fix (`src/components/common/CardDraftFooter.tsx`, `src/components/products/ProductDraftFooter.tsx`)**:
+    - Updated container layouts with `gap-3`, `shrink-0`, and `flex-wrap` protection.
+    - Enforced `whitespace-nowrap select-none shrink-0` across all "Descartar" and "Guardar Cambios" buttons, eliminating text collisions.
+  - **Rule 300 / Rule 500 Compliance**:
+    - `src/utils/marginSentinel.ts`: 148 lines (< 300).
+    - `src/components/materials/MarginSentinelModal.tsx`: 204 lines (< 500).
+    - `src/components/products/ProductFabricPricingTable.tsx`: 350 lines (< 500).
+    - `src/components/products/ProductCard.tsx`: 440 lines (< 500).
+    - `src/components/views/MaterialsView.tsx`: 199 lines (< 500).
+    - Strict Type Safety: Zero `any` or `@ts-ignore` across all code.
+
+### Universal Draft Isolation and Explicit Save/Discard Across All Application Cards and Views
+- **What failed / Business problem**:
+  - Across Materials (`MaterialsView.tsx`, `MaterialCard.tsx`, `AccessoryCard.tsx`), Staff (`StaffView.tsx`), Overhead (`RegularPaymentsView.tsx`, `DailyExpensesView.tsx`), and Global Parameters (`ProfitView.tsx`), numeric and textual input fields directly invoked `onChange` handlers on every keystroke.
+  - As a consequence, typing a partial number (e.g. typing `1200` through `1`, `12`, `120`, `1200`) triggered multiple instantaneous writes to Firestore and LocalStorage, while immediately recomputing unit overhead, labor allocations, and pricing matrices globally.
+  - Accidental user errors or typing slips immediately altered production pricing without giving the user a chance to review or discard changes.
+- **Why it failed**:
+  - The application originally relied on simple top-down state where child cards were controlled strictly by parent state with immediate `onChange` mutation callbacks.
+  - Lack of a generic, isolated draft buffer architecture meant cards lacked independent dirty tracking and revert capabilities.
+- **How root architecture was adapted**:
+  - **Universal Reusable Hook (`src/hooks/useDraftState.ts`)**:
+    - Created generic, strongly-typed `useDraftState<T>(initialValue, onCommit, options)` (136 lines, under 150 lines and Rule 300 compliant).
+    - Features:
+      - Internal deep clone of incoming entity (`draft`).
+      - Deep equality engine (`deepEqual`) to accurately track pristine vs. modified state (`isDirty`) without false positives.
+      - Atomic helper methods: `updateField(key, value)`, `updateDraft(mutator)`, `commit()`, and `discard()`.
+      - Transient feedback management (`statusMessage`) with auto-clearing timer and optional `onNotify` integration.
+  - **Standardized Action Footer Component (`src/components/common/CardDraftFooter.tsx`)**:
+    - Created reusable visual footer (166 lines, Rule 500 compliant) for cards across all domains.
+    - Features:
+      - Active state pill: "Cambios pendientes de confirmación" (pulsing amber indicator) vs. "Sin cambios pendientes" (emerald check).
+      - "Descartar" button (`RotateCcw`) reverting the local draft to parent state.
+      - "Guardar Cambios" button (`Save`) with high-contrast active styling and subtle scale animations.
+      - Compact mode support for dense row-based entries (staff, overhead, daily expenses).
+  - **Domain Component Decoupling & Isolation**:
+    - **Materials & Insumos (`src/components/materials/MaterialCard.tsx`, `AccessoryCard.tsx`, `MaterialsView.tsx`)**:
+      - Encapsulated unit cost, shrinkage/wastage %, default suppliers, packaging, and extra logistics in isolated local drafts.
+      - Extracted `MaterialCard` into its own modular component, reducing `MaterialsView.tsx` from 437 to 164 lines.
+      - Added visual border cues: amber outline and glow when dirty.
+    - **Staff / Planilla (`src/components/staff/StaffCard.tsx`, `src/components/views/StaffView.tsx`)**:
+      - Created dedicated `StaffCard.tsx` (138 lines) wrapping headcount (`count`), name, role, and monthly wage in `useDraftState`.
+      - Reduced `StaffView.tsx` from 155 to 103 lines.
+      - Salary or headcount edits do not recalculate unit labor costs until explicitly saved.
+    - **Overhead & Indirect Costs (`src/components/overhead/RegularPaymentCard.tsx`, `DailyExpenseCard.tsx`, `RegularPaymentsView.tsx`, `DailyExpensesView.tsx`)**:
+      - Created `RegularPaymentCard.tsx` (124 lines) and `DailyExpenseCard.tsx` (99 lines) with draft isolation and compact footers.
+      - Rent, utilities, subscriptions, and daily operational expenses stay isolated in draft until confirmed.
+      - Reduced `RegularPaymentsView.tsx` to 110 lines and `DailyExpensesView.tsx` to 121 lines.
+    - **Global Parameters & Margins (`src/components/views/ProfitView.tsx`)**:
+      - Integrated `useDraftState<GlobalParametersDraft>` for retail margin, wholesale margin, and monthly production capacity (`productionCapacity`).
+      - Sliders provide real-time visual projections in a preview mode with an amber "Vista previa con parámetros sin guardar" pill.
+      - Root configuration and Firestore persistence only update upon clicking "Guardar Parámetros".
+  - **Rule 300 / Rule 500 Compliance & Strict Typing**:
+    - `src/hooks/useDraftState.ts`: 136 lines (< 300).
+    - `src/components/common/CardDraftFooter.tsx`: 166 lines (< 500).
+    - `src/components/materials/MaterialCard.tsx`: 224 lines (< 500).
+    - `src/components/materials/AccessoryCard.tsx`: 392 lines (< 500).
+    - `src/components/views/MaterialsView.tsx`: 164 lines (< 500).
+    - `src/components/staff/StaffCard.tsx`: 138 lines (< 500).
+    - `src/components/views/StaffView.tsx`: 103 lines (< 500).
+    - `src/components/overhead/RegularPaymentCard.tsx`: 124 lines (< 500).
+    - `src/components/views/RegularPaymentsView.tsx`: 110 lines (< 500).
+    - `src/components/overhead/DailyExpenseCard.tsx`: 99 lines (< 500).
+    - `src/components/views/DailyExpensesView.tsx`: 121 lines (< 500).
+    - `src/components/views/ProfitView.tsx`: 462 lines (< 500).
+    - Strict Type Safety: Zero `any` or `@ts-ignore` across all files.
+
+### Filtering "Precios Finales por Tela" and "Matriz de Precios" by `product.allowedFabricIds`
+- **What failed**:
+  - "PRECIOS FINALES POR TELA" in `ProductCard.tsx` and the global "Matriz de Precios" (`PricingMatrixView.tsx` / `PricingMatrixTable.tsx`) displayed pricing for forbidden/unselected fabrics (e.g., Cuero on Filipinas or Gorros), calculating meaningless prices for garment-fabric combinations that will never be produced.
+- **Why it failed**:
+  - The local breakdown table rendered all fabrics from `config.materials` without filtering by `product.allowedFabricIds`.
+  - The matrix view rendered placeholder dashes (`—`) rather than displaying an explicit `"No aplica"` state, and allowed fabrics logic in calculation did not properly treat empty restriction sets or unconfigured defaults.
+- **How it was fixed**:
+  - **Local Breakdown Table (`src/components/products/ProductFabricPricingTable.tsx`)**:
+    - Filtered rendered rows by `product.allowedFabricIds`. If `product.allowedFabricIds` is undefined, defaults to showing all enabled fabrics.
+    - If `product.allowedFabricIds` is empty or no fabrics match, renders a clear contextual empty state: *"Seleccione al menos una tela permitida arriba."*
+    - Unselected fabric pills (e.g., toggling off `Cuero`) immediately disappear from the table in real time as the draft updates.
+    - Added a live count indicator pill in the table header showing the number of allowed fabrics.
+  - **Global Pricing Matrix (`src/components/pricing/PricingMatrixTable.tsx` & `src/utils/pricingMatrix.ts`)**:
+    - Updated `calculateMatrixCell` in `pricingMatrix.ts` to strictly mark any fabric where `product.allowedFabricIds && !product.allowedFabricIds.includes(fabric.id)` as `isApplicable: false` with reason `"No aplica"`.
+    - In `PricingMatrixTable.tsx`, rendered `"No aplica"` (styled in muted italic stone text) for any column where the fabric is not allowed for the product.
+    - Synchronized CSV and PDF export modules (`exportMatrixToCsv`, `exportMatrixToPdf`) to output `"No aplica"` for unapplicable fabric combinations.
+  - **Catalog Normalization & Fallbacks (`src/data/defaultCatalog.ts` & `src/utils/validation.ts`)**:
+    - Configured operational `allowedFabricIds` across default products in `DEFAULT_GLOBAL_CONFIG` so garments like Filipina, Gorro, and Guardapolvo reflect verified atelier protocols out of the box (excluding Cuero, etc.).
+    - Added fallback in `validateProduct` to inherit default allowed fabrics if legacy products load without an `allowedFabricIds` array.
+- **Rule Compliance**:
+  - `src/components/products/ProductFabricPricingTable.tsx`: 128 lines (< 500).
+  - `src/components/pricing/PricingMatrixTable.tsx`: 303 lines (< 500).
+  - `src/components/views/PricingMatrixView.tsx`: 234 lines (< 500).
+  - `src/utils/pricingMatrix.ts`: 195 lines (< 300).
+  - Zero `any` or `@ts-ignore`. Zero hardcoding (filtering relies strictly on `material.id` and `product.allowedFabricIds`).
+
+### Wheel-Scroll Mutation Prevention & Explicit Save/Discard Draft State in Product Configuration
+- **What failed / Business problem**:
+  - **Accidental Wheel Mutation**: HTML `<input type="number">` fields across the app listened to mouse wheel scroll events. When users scrolled through views, hovering over number inputs inadvertently incremented or decremented critical financial parameters (fabric consumption, effort weights, unit costs, salaries, margins).
+  - **Volatile Instant Auto-Save**: In `ProductCard.tsx`, input fields mutated the global configuration and triggered immediate Firestore / LocalStorage writes on every keystroke (`onChange`), risking corrupted drafts and unconfirmed persistence of incomplete edits.
+- **Why it failed**:
+  - Default browser behavior for focused or hovered number inputs handles mouse wheel ticks as increment/decrement steps unless explicitly blurred or intercepted.
+  - `ProductCard.tsx` directly invoked `onUpdateProduct` upon `onChange` without an intermediate buffer or dirty-state verification.
+- **How root architecture was adapted**:
+  - **Dedicated Draft Hook (`src/hooks/useProductDraft.ts`)**:
+    - Created an encapsulated, testable hook (`useProductDraft.ts`, 202 lines, adhering to Rule 300) to decouple active editing from root persistence.
+    - Deep-clones initial product data and maintains local `draftProduct` state.
+    - Tracks deep equality with parent state using robust dirty checking (`isDirty`).
+    - Provides atomic methods: `updateDraft`, `addIngredient`, `updateIngredient`, `removeIngredient`, `saveDraft`, and `discardDraft`.
+    - Coordinates notifications via `onNotify` and transient status indicators.
+  - **Component Decoupling & Line Limit Compliance (`src/components/products/`)**:
+    - Extracted comparative fabric table into `ProductFabricPricingTable.tsx` (102 lines).
+    - Extracted sticky action bar into `ProductDraftFooter.tsx` (77 lines).
+    - Reduced `ProductCard.tsx` from 552 to 418 lines (Rule 500 compliant).
+    - Added high-contrast sticky bottom action bar displaying "Guardar Cambios" (with active orange glow when dirty) and "Descartar" (reverting all local mutations).
+    - Displays clear state pill: *"Cambios pendientes de confirmación"* (pulsing amber) vs *"Al día con el catálogo"* (emerald checkmark).
+  - **Global & Local Mouse Wheel Blur Prevention**:
+    - Added `onWheel={(e) => e.currentTarget.blur()}` across every single `type="number"` input in the codebase:
+      - `ProductCard.tsx` (effort weight, fabric meters, insumo quantities)
+      - `AccessoryCard.tsx` (unit cost, batch size, extra logistics costs, margins)
+      - `MaterialsView.tsx` (unit costs, wastage percentages, override margins, batch sizes)
+      - `RegularPaymentsView.tsx` (payment amounts)
+      - `DailyExpensesView.tsx` (daily expense amounts)
+      - `StaffView.tsx` (staff headcount, monthly salaries)
+      - `MarginCalculatorCard.tsx` (custom retail and wholesale simulator prices)
+      - `DashboardControls.tsx` (order accessory quantities)
+      - `PricingMatrixTable.tsx` (inline fabric consumption editor)
+    - Added a global passive window listener in `App.tsx` that automatically blurs any active number input on wheel scroll as an infallible safety net.
+- **Rule Compliance**:
+  - `src/hooks/useProductDraft.ts`: 202 lines (< 300).
+  - `src/components/products/ProductCard.tsx`: 418 lines (< 500).
+  - `src/components/products/ProductFabricPricingTable.tsx`: 102 lines (< 500).
+  - `src/components/products/ProductDraftFooter.tsx`: 77 lines (< 500).
+  - Zero `any` types or `@ts-ignore`. All external contracts validated.
+
+### Proportional Labor & Overhead Allocation via `productionWeight`
+- **What failed / Business problem**:
+  - The pricing engine previously allocated a flat, equal share of monthly workshop overhead and labor (`(regularPayments + dailyExpenses + staff) / productionCapacity`) across every garment model regardless of tailoring complexity or assembly time.
+  - Fast-production garments (e.g., Gorros, produced at 20 units/day vs Filipinas at 5 units/day) absorbed the same fixed overhead and staff costs as complex jackets, distorting prices and inflating Gorros from a market benchmark of Bs 35 to over Bs 90.
+- **Why it failed**:
+  - The data model lacked an effort/complexity weight factor per product to scale indirect unit allocations.
+  - Calculation logic divided monthly costs by capacity without weighting for relative workshop bench time.
+- **How root architecture was adapted**:
+  - **Data Model (`src/types.ts`)**:
+    - Added optional `productionWeight?: number` to `Product` interface representing the relative workshop effort/time ratio compared to a base garment (Filipina = 1.0, Pantalón = 0.8, Mandil = 0.5, Gorro = 0.25).
+  - **Modular Pricing Engine (`src/utils/pricingCalculator.ts`)**:
+    - Extracted pricing calculations into `src/utils/pricingCalculator.ts` (181 lines, adhering to Rule 300).
+    - In `calculateProductAnalysis`, retrieved `productionWeight` with a safe positive fallback of `1.0`.
+    - Scaled both `laborAllocation` and `overheadAllocation` proportionally by `weight`:
+      - `laborAllocation = (monthlyStaff / productionCapacity) * weight`
+      - `overheadAllocation = (totalOverheadExcludingLabor / productionCapacity) * weight`
+    - Re-exported functions from `src/utils/calculations.ts` (reduced from 291 to 157 lines) for seamless backwards compatibility.
+  - **Validation & Runtime Normalization (`src/utils/validation.ts`)**:
+    - Updated `validateProduct` to validate and normalize `productionWeight` to `1.0` if undefined, missing, non-numeric, or `<= 0`.
+    - Integrated fallback to `DEFAULT_GLOBAL_CONFIG` defaults to ensure legacy stored configurations and imported backups load cleanly without schema errors or NaN calculations.
+  - **Default Catalog Data (`src/data/defaultCatalog.ts`)**:
+    - Populated realistic operational weights across all baseline catalog products:
+      - `Filipina`: 1.0, `Guardapolvo`: 1.0, `Camisa (hospitalar)`: 1.0, `Camisa (servicio)`: 1.0.
+      - `Pantalón`: 0.8.
+      - `Delantal`: 0.5, `Mandil`: 0.5.
+      - `Gorro`: 0.25.
+  - **Garment Configuration UI (`src/components/products/ProductCard.tsx`)**:
+    - Added dedicated workshop effort card with numeric input for "Factor de Confección / Equivalencia de Esfuerzo".
+    - Enforced constraints: `type="number"`, `step="0.05"`, `min="0.1"`, `max="3.0"`, default `1.0`.
+    - Added helper text: *"Proporción de tiempo frente a una Filipina (1.0 = Filipina, 0.5 = Mandil, 0.25 = Gorro)"*.
+    - Wired new product creation in `ProductsView.tsx` to initialize `productionWeight: 1.0`.
+    - Updated pricing matrix formula footnote in `PricingMatrixView.tsx` to reflect the proportional factor.
+- **Rule Compliance**:
+  - `src/utils/pricingCalculator.ts`: 181 lines (< 300).
+  - `src/utils/calculations.ts`: 157 lines (< 300).
+  - `src/utils/validation.ts`: 281 lines (< 300).
+  - `src/components/products/ProductCard.tsx`: 456 lines (< 500).
+  - Zero `any` types or `@ts-ignore` statements. Full `tsc --noEmit` and production build pass cleanly.
+
+### Granular Catalog Metrics & Full Backup Scope Clarification
+- **What failed**:
+  - The JSON download button in the "Centro de Respaldo y Seguridad" modal read `DESCARGAR RESPALDO JSON (8 PRODUCTOS)`, and the catalog metrics card displayed a coarse metric (`29 Materiales cargados | 8 Productos activos`).
+  - This misled the user into thinking that only the 8 garments were being serialized into the backup, or that insumos, fabrics, and accessories were not part of the backup process.
+- **Why it failed**:
+  - The UI button label was bound solely to `productsCount` (`config.products.length`) rather than reflecting the complete `GlobalConfig` payload.
+  - The metrics summary did not break down the `config.materials` collection by its category discriminator (`fabric`, `other`, `accessory` / `service`).
+- **How it was fixed**:
+  - **Deconstructed Catalog Metrics (`src/components/modals/BackupModal.tsx`)**:
+    - Computed category-specific tallies: `telasCount` (`category === 'fabric'`), `insumosCount` (`category === 'other'`), `accesoriosCount` (`category === 'accessory' || category === 'service'`), and `productosCount` (`config.products.length`).
+    - Derived total backup item tally: `totalItems = config.materials.length + config.products.length`.
+  - **Rebuilt Metrics Breakdown Card**:
+    - Added a structured 4-stat grid displaying distinct counts for **Telas**, **Insumos**, **Accesorios / Servicios**, and **Productos**, with clear visual hierarchy and total item count indicator.
+  - **Clarified Export Button Label & Subtext**:
+    - Upgraded button label to `DESCARGAR RESPALDO COMPLETO JSON (${totalItems} ÍTEMS)`.
+    - Added an explanatory subtitle: `(${config.materials.length} Materiales, Insumos y Accesorios + ${productosCount} Productos)`.
+  - **Granular Restore Feedback**:
+    - Updated file import confirmation banner in `BackupModal.tsx` and toast notification in `src/App.tsx` to read:
+      `¡Respaldo restaurado con éxito! (${telasCount} telas, ${insumosCount} insumos, ${accesoriosCount} accesorios, ${productosCount} productos)`.
+- **Rule Compliance**:
+  - `src/components/modals/BackupModal.tsx`: 335 lines (well below 500 line visual limit).
+  - `src/App.tsx`: 457 lines (well below 500 line visual limit).
+  - Strict type safety with 0 `any` or `@ts-ignore` statements. Full build and linter pass cleanly.
+
 ## [Unreleased] - 2026-09-04
 
 ### Direct Client-Side PDF Generation for Pricing Matrix

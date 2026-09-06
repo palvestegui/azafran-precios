@@ -11,7 +11,7 @@ import {
   Wifi,
   WifiOff,
 } from "lucide-react";
-import { GlobalConfig } from "../../types";
+import { GlobalConfig, Material, Product } from "../../types";
 import {
   downloadConfigAsJson,
   parseAndValidateConfigFile,
@@ -111,8 +111,19 @@ export function BackupModal({
       } catch {
         // Ignore localStorage quota errors
       }
+      const restoredTelas = validated.materials.filter(
+        (m: Material) => m.category === "fabric"
+      ).length;
+      const restoredInsumos = validated.materials.filter(
+        (m: Material) => m.category === "other"
+      ).length;
+      const restoredAccesorios = validated.materials.filter(
+        (m: Material) => m.category === "accessory" || m.category === "service"
+      ).length;
+      const restoredProductos = validated.products.length;
+
       setStatusMessage(
-        `¡Respaldo restaurado con éxito! (${validated.products.length} productos, ${validated.materials.length} materiales)`
+        `¡Respaldo restaurado con éxito! (${restoredTelas} telas, ${restoredInsumos} insumos, ${restoredAccesorios} accesorios, ${restoredProductos} productos)`
       );
       setIsError(false);
     } catch (err) {
@@ -127,8 +138,18 @@ export function BackupModal({
     }
   };
 
-  const materialsCount = config.materials?.length ?? 0;
-  const productsCount = config.products?.length ?? 0;
+  const telasCount = config.materials.filter(
+    (m: Material) => m.category === "fabric"
+  ).length;
+  const insumosCount = config.materials.filter(
+    (m: Material) => m.category === "other"
+  ).length;
+  const accesoriosCount = config.materials.filter(
+    (m: Material) => m.category === "accessory" || m.category === "service"
+  ).length;
+  const productosCount = config.products.length;
+  const totalItems = config.materials.length + config.products.length;
+
   const isOnline = typeof navigator !== "undefined" ? navigator.onLine : true;
   const showConnected = isCloudConnected && isOnline;
 
@@ -193,24 +214,57 @@ export function BackupModal({
             </div>
           </div>
 
-          {/* 3. Catalog Metrics & Last Backup Timestamp */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs font-mono pt-1">
-            <div className="bg-stone-900/90 border border-stone-800/80 p-2.5 rounded-lg">
-              <div className="flex items-center gap-1.5 text-stone-400 text-[10px] uppercase font-bold mb-1">
-                <Database className="w-3 h-3 text-orange-400 shrink-0" />
-                <span>Métricas de Catálogo</span>
+          {/* 3. Catalog Metrics Breakdown & Last Backup Timestamp */}
+          <div className="space-y-2 pt-1 font-mono">
+            <div className="bg-stone-900/90 border border-stone-800/80 p-3 rounded-lg">
+              <div className="flex items-center justify-between pb-2 mb-2.5 border-b border-stone-800/80">
+                <div className="flex items-center gap-1.5 text-stone-400 text-[10px] uppercase font-bold">
+                  <Database className="w-3.5 h-3.5 text-orange-400 shrink-0" />
+                  <span>Métricas de Catálogo ({totalItems} ítems totales)</span>
+                </div>
               </div>
-              <div className="text-stone-100 font-semibold text-[11px]">
-                {materialsCount} Materiales cargados | {productsCount} Productos activos
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+                <div className="bg-stone-950/70 border border-stone-800/60 p-2 rounded-lg">
+                  <span className="text-[10px] text-stone-400 uppercase font-bold block mb-0.5">
+                    Telas
+                  </span>
+                  <span className="text-white font-bold text-sm">
+                    {telasCount}
+                  </span>
+                </div>
+                <div className="bg-stone-950/70 border border-stone-800/60 p-2 rounded-lg">
+                  <span className="text-[10px] text-stone-400 uppercase font-bold block mb-0.5">
+                    Insumos
+                  </span>
+                  <span className="text-white font-bold text-sm">
+                    {insumosCount}
+                  </span>
+                </div>
+                <div className="bg-stone-950/70 border border-stone-800/60 p-2 rounded-lg">
+                  <span className="text-[10px] text-stone-400 uppercase font-bold block mb-0.5">
+                    Accesorios / Servicios
+                  </span>
+                  <span className="text-white font-bold text-sm">
+                    {accesoriosCount}
+                  </span>
+                </div>
+                <div className="bg-stone-950/70 border border-stone-800/60 p-2 rounded-lg">
+                  <span className="text-[10px] text-stone-400 uppercase font-bold block mb-0.5">
+                    Productos
+                  </span>
+                  <span className="text-orange-400 font-bold text-sm">
+                    {productosCount}
+                  </span>
+                </div>
               </div>
             </div>
 
-            <div className="bg-stone-900/90 border border-stone-800/80 p-2.5 rounded-lg">
-              <div className="flex items-center gap-1.5 text-stone-400 text-[10px] uppercase font-bold mb-1">
+            <div className="bg-stone-900/90 border border-stone-800/80 px-3 py-2 rounded-lg flex items-center justify-between">
+              <div className="flex items-center gap-1.5 text-stone-400 text-[10px] uppercase font-bold">
                 <Clock className="w-3 h-3 text-orange-400 shrink-0" />
-                <span>Último Respaldo</span>
+                <span>Último Respaldo Registrado</span>
               </div>
-              <div className="text-orange-400 font-semibold text-[11px] truncate">
+              <div className="text-orange-400 font-semibold text-xs truncate">
                 {formatTimestamp(lastBackupTime)}
               </div>
             </div>
@@ -239,10 +293,15 @@ export function BackupModal({
         <div className="flex flex-col gap-3">
           <button
             onClick={handleExport}
-            className="w-full bg-stone-800 hover:bg-stone-700 text-white font-bold text-xs uppercase tracking-widest py-3 px-4 rounded-xl flex items-center justify-center gap-2 border border-stone-700 transition-all shadow-sm active:scale-95"
+            className="w-full bg-stone-800 hover:bg-stone-700 text-white font-bold text-xs uppercase tracking-wider py-3 px-4 rounded-xl flex flex-col items-center justify-center gap-1 border border-stone-700 transition-all shadow-sm active:scale-95 text-center"
           >
-            <Download className="w-4 h-4 text-orange-500" />
-            <span>Descargar Respaldo JSON ({productsCount} productos)</span>
+            <div className="flex items-center justify-center gap-2">
+              <Download className="w-4 h-4 text-orange-500 shrink-0" />
+              <span>DESCARGAR RESPALDO COMPLETO JSON ({totalItems} ÍTEMS)</span>
+            </div>
+            <span className="text-[10px] font-normal text-stone-400 font-mono tracking-normal normal-case">
+              ({config.materials.length} Materiales, Insumos y Accesorios + {productosCount} Productos)
+            </span>
           </button>
 
           <input

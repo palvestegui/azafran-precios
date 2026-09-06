@@ -89,10 +89,10 @@ export function exportMatrixToPdf(
       const cell = calculateMatrixCell(prod, fabric, config);
       if (!cell.isApplicable) {
         if (mode === "combined") {
-          row.push("—");
-          row.push("—");
+          row.push("No aplica");
+          row.push("No aplica");
         } else {
-          row.push("—");
+          row.push("No aplica");
         }
       } else {
         if (mode === "combined") {
