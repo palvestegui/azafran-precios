@@ -149,22 +149,31 @@ mcpServer.tool("precios_sync_to_ventas", "Pulls complete matrix and writes direc
 
 async function startServer() {
   const app = express();
-  const PORT = 3000;
+  const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 
   // Global Transport Instance
   let transport: SSEServerTransport | null = null;
 
   app.get("/mcp", async (req, res) => {
+    res.setHeader("Access-Control-Allow-Origin", "*");
     transport = new SSEServerTransport("/mcp", res);
     await mcpServer.connect(transport);
   });
 
   app.post("/mcp", async (req, res) => {
+    res.setHeader("Access-Control-Allow-Origin", "*");
     if (!transport) {
       res.status(400).send("MCP transport not initialized. Please call GET /mcp first.");
       return;
     }
     await transport.handlePostMessage(req, res);
+  });
+  
+  app.options("/mcp", (req, res) => {
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+    res.status(204).end();
   });
 
   // Health check
@@ -188,7 +197,7 @@ async function startServer() {
   }
 
   app.listen(PORT, "0.0.0.0", () => {
-    console.log(`Server running on http://localhost:${PORT}`);
+    console.log(`Azafrán Precios server running on port ${PORT}`);
   });
 }
 
