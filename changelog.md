@@ -486,3 +486,4 @@
 - Implemented native Model Context Protocol (MCP) server at /mcp with 5 tools (matrix, materials, add_product, update_fabric_cost, sync_to_ventas).
 - Transitioned to Full-Stack Express + Vite architecture.
 - Enforced Bolivian Commercial Integer Rounding Rule (Math.round) for all retail and wholesale price calculations.
+- Migrated /mcp to direct, stateless JSON-RPC 2.0 to support Gemini Spark integration.
