@@ -483,3 +483,6 @@
 ### Fixed
 - Fixed recursive circular dependency in `getMaterialCost` for manufactured accessories by using `getMaterialTrueCostPerUnit` with recursion protection instead of recursively re-evaluating product analyses.
 - Resolved unit label displays across recipe ingredient selectors for batch materials.
+- Implemented native Model Context Protocol (MCP) server at /mcp with 5 tools (matrix, materials, add_product, update_fabric_cost, sync_to_ventas).
+- Transitioned to Full-Stack Express + Vite architecture.
+- Enforced Bolivian Commercial Integer Rounding Rule (Math.round) for all retail and wholesale price calculations.

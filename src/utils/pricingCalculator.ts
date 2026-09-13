@@ -9,6 +9,7 @@ import {
   getMaterialCost,
   DEFAULT_RETAIL_MARGIN,
   DEFAULT_WHOLESALE_MARGIN,
+  roundBob,
 } from "./calculations";
 
 export interface ProductAnalysisResult {
@@ -123,7 +124,7 @@ export function calculateProductAnalysis(
 
   let divisor = 1 - appliedMargin / 100;
   if (divisor <= 0) divisor = 0.01;
-  const recommendedPrice = costFloor / divisor;
+  const recommendedPrice = roundBob(costFloor / divisor);
 
   const profitPerUnit = recommendedPrice - costFloor;
 
@@ -155,7 +156,7 @@ export function calculateProductAnalysis(
 
   let wDivisor = 1 - appliedWholesaleMargin / 100;
   if (wDivisor <= 0) wDivisor = 0.01;
-  const recommendedWholesalePrice = costFloor / wDivisor;
+  const recommendedWholesalePrice = roundBob(costFloor / wDivisor);
   const wholesaleProfitPerUnit = recommendedWholesalePrice - costFloor;
 
   const wholesaleContributionMargin = recommendedWholesalePrice - materialCost;

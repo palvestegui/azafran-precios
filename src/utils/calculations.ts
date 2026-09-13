@@ -27,6 +27,8 @@ export {
 export const DEFAULT_RETAIL_MARGIN = 35;
 export const DEFAULT_WHOLESALE_MARGIN = 20;
 
+export const roundBob = (val: number) => Math.round(val);
+
 /**
  * Evaluates gross profit, margin percentage, and loss detection from selling price and cost floor.
  */
@@ -125,14 +127,14 @@ export function calculateAccessoryBatchPricing(
 
   let rDiv = 1 - retailMargin / 100;
   if (rDiv <= 0) rDiv = 0.01;
-  const unitRetailPrice = unitCost / rDiv;
-  const totalRetailPrice = unitRetailPrice * safeQty;
+  const unitRetailPrice = roundBob(unitCost / rDiv);
+  const totalRetailPrice = roundBob(unitRetailPrice * safeQty);
   const retailProfit = totalRetailPrice - totalCost;
 
   let wDiv = 1 - wholesaleMargin / 100;
   if (wDiv <= 0) wDiv = 0.01;
-  const unitWholesalePrice = unitCost / wDiv;
-  const totalWholesalePrice = unitWholesalePrice * safeQty;
+  const unitWholesalePrice = roundBob(unitCost / wDiv);
+  const totalWholesalePrice = roundBob(unitWholesalePrice * safeQty);
   const wholesaleProfit = totalWholesalePrice - totalCost;
 
   return {

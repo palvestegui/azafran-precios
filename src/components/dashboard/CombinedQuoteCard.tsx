@@ -1,6 +1,6 @@
 import React from "react";
 import { Material } from "../../types";
-import { calculateAccessoryBatchPricing } from "../../utils/calculations";
+import { calculateAccessoryBatchPricing, roundBob } from "../../utils/calculations";
 
 interface CombinedQuoteCardProps {
   customRetailPrice: string;
@@ -47,8 +47,8 @@ export function CombinedQuoteCard({
     }
   });
 
-  const combinedRetailUnit = baseRetail + totalAccRetail;
-  const combinedWholesaleUnit = baseWholesale + totalAccWholesale;
+  const combinedRetailUnit = roundBob(baseRetail + totalAccRetail);
+  const combinedWholesaleUnit = roundBob(baseWholesale + totalAccWholesale);
   const combinedCostUnit = costFloor + totalAccCost;
 
   const totalOrderRetail = combinedRetailUnit * referenceQty;
