@@ -1,20 +1,10 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import {
-  Package,
-  Scissors,
-  Receipt,
-  Coffee,
-  Users,
-  TrendingUp,
-  LogOut,
-  LayoutDashboard,
-  Table,
   ShieldCheck,
   CheckCircle2,
   AlertTriangle,
-  Briefcase,
-  ChevronDown,
+  Menu,
 } from "lucide-react";
 import { GlobalConfig, Material } from "./types";
 import {
@@ -36,17 +26,10 @@ import { RegularPaymentsView } from "./components/views/RegularPaymentsView";
 import { DailyExpensesView } from "./components/views/DailyExpensesView";
 import { StaffView } from "./components/views/StaffView";
 import { ProfitView } from "./components/views/ProfitView";
+import { UsersView } from "./components/views/UsersView";
+import { AccessoriesView } from "./components/views/AccessoriesView";
 import { BackupModal } from "./components/modals/BackupModal";
-
-type ViewState =
-  | "materials"
-  | "products"
-  | "pricingMatrix"
-  | "regularPayments"
-  | "dailyExpenses"
-  | "staff"
-  | "profit"
-  | "dashboard";
+import { SidebarNav, ViewState } from "./components/common/SidebarNav";
 
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
@@ -80,41 +63,30 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [isBackupOpen, setIsBackupOpen] = useState(false);
-  const [isFinanceOpen, setIsFinanceOpen] = useState(false);
   const [feedback, setFeedback] = useState<{
     text: string;
     type: "success" | "error";
   } | null>(null);
-  const financeDropdownRef = useRef<HTMLDivElement>(null);
+
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(() => {
+    return localStorage.getItem('azafran_sidebar_collapsed') === 'true';
+  });
+
+  const toggleSidebar = () => {
+    setIsSidebarCollapsed(prev => {
+      const next = !prev;
+      localStorage.setItem('azafran_sidebar_collapsed', String(next));
+      return next;
+    });
+  };
+
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   useEffect(() => {
     if (!feedback) return;
     const timer = setTimeout(() => setFeedback(null), 4000);
     return () => clearTimeout(timer);
   }, [feedback]);
-
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (
-        financeDropdownRef.current &&
-        !financeDropdownRef.current.contains(e.target as Node)
-      ) {
-        setIsFinanceOpen(false);
-      }
-    };
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        setIsFinanceOpen(false);
-      }
-    };
-
-    document.addEventListener("mousedown", handleClickOutside);
-    document.addEventListener("keydown", handleKeyDown);
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-      document.removeEventListener("keydown", handleKeyDown);
-    };
-  }, []);
 
   useEffect(() => {
     const handleWheel = () => {
@@ -140,7 +112,27 @@ export default function App() {
     if (user) {
       const unsub = getGlobalConfig((c) => {
         if (c) {
-          const validated = validateAndNormalizeGlobalConfig(c, DEFAULT_GLOBAL_CONFIG);
+          let validated = validateAndNormalizeGlobalConfig(c, DEFAULT_GLOBAL_CONFIG);
+          if (user && user.email) {
+            const hasUser = validated.authorizedUsers?.some(u => u.email === user.email);
+            if (!hasUser) {
+              validated = {
+                ...validated,
+                authorizedUsers: [
+                  ...(validated.authorizedUsers || []),
+                  {
+                    id: `usr-${Date.now()}`,
+                    email: user.email,
+                    name: user.displayName || user.email.split('@')[0],
+                    role: 'admin',
+                    status: 'ACTIVO',
+                    createdAt: new Date().toISOString().split('T')[0]
+                  }
+                ]
+              };
+              saveGlobalConfig(validated);
+            }
+          }
           setConfig(validated);
           try {
             localStorage.setItem(
@@ -170,7 +162,7 @@ export default function App() {
     } catch {
       // Ignore
     }
-    if (!user) return; // Don't save to DB if logged out
+    if (!user) return;
     setIsSaving(true);
     await saveGlobalConfig(newConfig);
     setIsSaving(false);
@@ -197,7 +189,7 @@ export default function App() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-stone-950 flex items-center justify-center text-orange-500 font-mono">
+      <div className="min-h-screen bg-[#0A0A0B] flex items-center justify-center text-orange-500 font-mono">
         Cargando...
       </div>
     );
@@ -205,7 +197,7 @@ export default function App() {
 
   if (!user) {
     return (
-      <div className="min-h-screen bg-stone-950 flex flex-col items-center justify-center text-white px-4">
+      <div className="min-h-screen bg-[#0A0A0B] flex flex-col items-center justify-center text-white px-4">
         <h1 className="text-4xl font-black text-orange-500 italic mb-6">
           Azafrán App
         </h1>
@@ -222,266 +214,203 @@ export default function App() {
     );
   }
 
-  const primaryTabs = [
-    {
-      id: "dashboard" as const,
-      label: "Resumen",
-      icon: LayoutDashboard,
-    },
-    {
-      id: "pricingMatrix" as const,
-      label: "Matriz de Precios",
-      icon: Table,
-    },
-    { id: "materials" as const, label: "Materiales", icon: Package },
-    { id: "products" as const, label: "Productos", icon: Scissors },
-  ];
-
-  const financeTabs = [
-    {
-      id: "regularPayments" as const,
-      label: "Pagos Regulares",
-      icon: Receipt,
-    },
-    {
-      id: "dailyExpenses" as const,
-      label: "Gastos Diarios",
-      icon: Coffee,
-    },
-    { id: "staff" as const, label: "Planilla", icon: Users },
-    {
-      id: "profit" as const,
-      label: "Rentabilidad",
-      icon: TrendingUp,
-    },
-  ];
-
-  const isFinanceActive = financeTabs.some((tab) => tab.id === view);
+  const renderActiveView = () => (
+    <AnimatePresence mode="wait">
+      <motion.div
+        key={view}
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, y: -10 }}
+        transition={{ duration: 0.2 }}
+        className="w-full h-full"
+      >
+        {view === "dashboard" && <DashboardView config={config} />}
+        {view === "pricingMatrix" && (
+          <PricingMatrixView config={config} onChange={saveConfig} />
+        )}
+        {view === "fabrics" && (
+          <MaterialsView
+            mode="fabrics"
+            config={config}
+            onChange={saveConfig}
+            onNotify={(text, type) => setFeedback({ text, type })}
+            onNavigate={setView}
+          />
+        )}
+        {view === "supplies" && (
+          <MaterialsView
+            mode="supplies"
+            config={config}
+            onChange={saveConfig}
+            onNotify={(text, type) => setFeedback({ text, type })}
+            onNavigate={setView}
+          />
+        )}
+        {view === "products" && (
+          <ProductsView
+            config={config}
+            onChange={saveConfig}
+            onNotify={(text, type) => setFeedback({ text, type })}
+          />
+        )}
+        {view === "accessories" && (
+          <AccessoriesView
+            config={config}
+            onChange={saveConfig}
+            onNotify={(text, type) => setFeedback({ text, type })}
+          />
+        )}
+        {view === "regularPayments" && (
+          <RegularPaymentsView
+            config={config}
+            onChange={saveConfig}
+            onNotify={(text, type) => setFeedback({ text, type })}
+          />
+        )}
+        {view === "dailyExpenses" && (
+          <DailyExpensesView
+            config={config}
+            onChange={saveConfig}
+            onNotify={(text, type) => setFeedback({ text, type })}
+          />
+        )}
+        {view === "staff" && (
+          <StaffView
+            config={config}
+            onChange={saveConfig}
+            onNotify={(text, type) => setFeedback({ text, type })}
+          />
+        )}
+        {view === "profit" && (
+          <ProfitView
+            config={config}
+            onChange={saveConfig}
+            onNotify={(text, type) => setFeedback({ text, type })}
+          />
+        )}
+        {view === "users" && (
+          <UsersView
+            config={config}
+            onChange={saveConfig}
+            onNotify={(text, type) => setFeedback({ text, type })}
+          />
+        )}
+      </motion.div>
+    </AnimatePresence>
+  );
 
   return (
-    <div className="min-h-screen bg-stone-950 text-white selection:bg-orange-500/30 w-full pb-32">
-      {/* Top Header Navigation */}
-      <header className="border-b border-stone-800 bg-stone-950/80 backdrop-blur-xl sticky top-0 z-50 overflow-visible">
-        <div className="max-w-7xl mx-auto flex items-center justify-between p-4 overflow-visible">
-          {/* Brand Logo & Title */}
-          <div className="flex items-center gap-3 shrink-0">
-            <div className="w-12 h-12 bg-white rounded-full flex items-center justify-center p-1 overflow-hidden shadow-[0_0_20px_rgba(255,255,255,0.2)]">
-              <img
-                src="/logo.png"
-                alt="Azafrán Chefwear Logo"
-                className="w-full h-full object-contain"
-              />
-            </div>
-            <div className="hidden sm:block">
-              <h1 className="font-black italic text-xl tracking-tight leading-none">
-                Azafrán
-              </h1>
-              <p className="text-xs text-orange-500 font-mono uppercase tracking-[0.2em]">
-                Data System
-              </p>
-            </div>
-          </div>
+    <div className="flex h-screen w-screen overflow-hidden bg-stone-950 text-white select-none">
+      {/* DESKTOP IN-FLOW SIDEBAR */}
+      <aside
+        className={cn(
+          "hidden lg:flex flex-col justify-between shrink-0 h-full border-r border-stone-800 bg-stone-950/90 transition-all duration-300 z-20 overflow-x-hidden overflow-y-hidden",
+          isSidebarCollapsed ? "w-16" : "w-64"
+        )}
+      >
+        <SidebarNav
+          isCollapsed={isSidebarCollapsed}
+          onToggleCollapse={toggleSidebar}
+          activeTab={view}
+          setActiveTab={setView}
+          user={user}
+          onLogout={logout}
+        />
+      </aside>
 
-          {/* Clean Left Side Navigation Tabs & Grouped Costos Dropdown */}
-          <nav className="flex items-center gap-1.5 p-1 bg-stone-900 border border-stone-800 rounded-xl overflow-visible">
-            {primaryTabs.map((tab) => {
-              const isActive = view === tab.id;
-              return (
-                <button
-                  key={tab.id}
-                  onClick={() => setView(tab.id)}
-                  className={cn(
-                    "flex items-center gap-2 px-3 py-2 rounded-lg font-mono text-xs uppercase tracking-wider whitespace-nowrap transition-all",
-                    isActive
-                      ? "bg-orange-500 text-black font-bold shadow-sm"
-                      : "text-stone-400 hover:text-white hover:bg-stone-800"
-                  )}
-                >
-                  <tab.icon className="w-3.5 h-3.5" />
-                  <span className="hidden md:inline">{tab.label}</span>
-                </button>
-              );
-            })}
-
-            {/* Grouped Costos & Finanzas Dropdown */}
-            <div className="relative overflow-visible" ref={financeDropdownRef}>
-              <button
-                onClick={() => setIsFinanceOpen((prev) => !prev)}
-                className={cn(
-                  "flex items-center gap-1.5 px-3 py-2 rounded-lg font-mono text-xs uppercase tracking-wider whitespace-nowrap transition-all",
-                  isFinanceActive
-                    ? "bg-orange-500 text-black font-bold shadow-sm"
-                    : "text-stone-400 hover:text-white hover:bg-stone-800"
-                )}
-                title="Costos & Finanzas"
-              >
-                <Briefcase className="w-3.5 h-3.5" />
-                <span className="hidden md:inline">Costos & Finanzas</span>
-                <ChevronDown
-                  className={cn(
-                    "w-3.5 h-3.5 transition-transform duration-200",
-                    isFinanceOpen && "rotate-180"
-                  )}
-                />
-              </button>
-
-              {isFinanceOpen && (
-                <div className="absolute top-full left-0 mt-2 w-52 bg-stone-900 border border-stone-800 rounded-xl shadow-2xl py-1.5 z-50 backdrop-blur-md animate-in fade-in zoom-in-95">
-                  {financeTabs.map((tab) => {
-                    const isChildActive = view === tab.id;
-                    return (
-                      <button
-                        key={tab.id}
-                        onClick={() => {
-                          setView(tab.id);
-                          setIsFinanceOpen(false);
-                        }}
-                        className={cn(
-                          "w-full flex items-center justify-between px-3.5 py-2.5 text-xs font-mono transition-colors text-left",
-                          isChildActive
-                            ? "bg-orange-500/15 text-orange-400 font-bold"
-                            : "text-stone-300 hover:bg-stone-800 hover:text-white"
-                        )}
-                      >
-                        <div className="flex items-center gap-2">
-                          <tab.icon
-                            className={cn(
-                              "w-3.5 h-3.5",
-                              isChildActive ? "text-orange-400" : "text-stone-400"
-                            )}
-                          />
-                          <span>{tab.label}</span>
-                        </div>
-                        {isChildActive && (
-                          <span className="w-1.5 h-1.5 rounded-full bg-orange-500" />
-                        )}
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          </nav>
-
-          {/* Right Side Controls: Shield Button, User Avatar, Exit Icon */}
-          <div className="flex items-center gap-3 shrink-0">
-            {isSaving && (
-              <span className="text-orange-500 text-xs animate-pulse font-mono hidden sm:inline">
-                Guardando...
-              </span>
-            )}
-            <button
-              onClick={() => setIsBackupOpen(true)}
-              title="Centro de Respaldo y Seguridad"
-              className="p-2 rounded-xl bg-stone-900 border border-stone-800 text-stone-300 hover:text-orange-400 hover:border-orange-500/40 transition-all text-xs font-mono shadow-sm active:scale-95"
-            >
-              <ShieldCheck className="w-4 h-4 text-orange-500" />
-            </button>
-            <div className="flex items-center gap-2.5 border-l border-stone-800 pl-3">
-              <img
-                src={user.photoURL || ""}
-                alt="avatar"
-                className="w-8 h-8 rounded-full border border-stone-700 object-cover"
-              />
-              <button
-                onClick={logout}
-                title="Cerrar Sesión"
-                className="text-stone-500 hover:text-red-500 transition-colors p-1"
-              >
-                <LogOut className="w-4 h-4" />
-              </button>
-            </div>
-          </div>
-        </div>
-      </header>
-
-      {feedback && (
-        <div className="max-w-7xl mx-auto px-4 md:px-8 mt-3">
+      {/* MOBILE DRAWER */}
+      {isMobileMenuOpen && (
+        <div className="lg:hidden fixed inset-0 z-50 flex">
           <div
-            className={cn(
-              "p-3 rounded-xl text-xs font-mono flex items-center justify-between gap-3 border transition-all animate-in fade-in slide-in-from-top-2",
-              feedback.type === "success"
-                ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-300"
-                : "bg-red-500/10 border-red-500/30 text-red-300"
-            )}
-          >
-            <div className="flex items-center gap-2">
-              {feedback.type === "success" ? (
-                <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-              ) : (
-                <AlertTriangle className="w-4 h-4 text-red-400 shrink-0" />
-              )}
-              <span>{feedback.text}</span>
-            </div>
-            <button
-              onClick={() => setFeedback(null)}
-              className="text-stone-400 hover:text-white text-xs px-1"
-            >
-              ✕
-            </button>
-          </div>
+            className="fixed inset-0 bg-black/60 backdrop-blur-sm transition-opacity"
+            onClick={() => setIsMobileMenuOpen(false)}
+          />
+          <aside className="relative flex flex-col w-64 h-full bg-stone-950 border-r border-stone-800 z-10 shadow-2xl overflow-x-hidden overflow-y-hidden">
+            <SidebarNav
+              isCollapsed={false}
+              onToggleCollapse={() => setIsMobileMenuOpen(false)}
+              activeTab={view}
+              setActiveTab={(nextView) => {
+                setView(nextView);
+                setIsMobileMenuOpen(false);
+              }}
+              user={user}
+              onLogout={logout}
+            />
+          </aside>
         </div>
       )}
 
-      <main className="max-w-7xl mx-auto p-4 md:p-8">
-        <AnimatePresence mode="wait">
-          <motion.div
-            key={view}
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            transition={{ duration: 0.2 }}
-          >
-            {view === "dashboard" && <DashboardView config={config} />}
-            {view === "pricingMatrix" && (
-              <PricingMatrixView config={config} onChange={saveConfig} />
-            )}
-            {view === "materials" && (
-              <MaterialsView
-                config={config}
-                onChange={saveConfig}
-                onNotify={(text, type) => setFeedback({ text, type })}
-                onNavigate={setView}
-              />
-            )}
-            {view === "products" && (
-              <ProductsView
-                config={config}
-                onChange={saveConfig}
-                onNotify={(text, type) => setFeedback({ text, type })}
-              />
-            )}
-            {view === "regularPayments" && (
-              <RegularPaymentsView
-                config={config}
-                onChange={saveConfig}
-                onNotify={(text, type) => setFeedback({ text, type })}
-              />
-            )}
-            {view === "dailyExpenses" && (
-              <DailyExpensesView
-                config={config}
-                onChange={saveConfig}
-                onNotify={(text, type) => setFeedback({ text, type })}
-              />
-            )}
-            {view === "staff" && (
-              <StaffView
-                config={config}
-                onChange={saveConfig}
-                onNotify={(text, type) => setFeedback({ text, type })}
-              />
-            )}
-            {view === "profit" && (
-              <ProfitView
-                config={config}
-                onChange={saveConfig}
-                onNotify={(text, type) => setFeedback({ text, type })}
-              />
-            )}
-          </motion.div>
-        </AnimatePresence>
-      </main>
+      {/* MAIN CONTENT AREA - AUTOMATIC DYNAMIC FLOW */}
+      <div className="flex-1 flex flex-col h-full min-w-0 overflow-hidden">
+        {/* Top Breadcrumb Bar */}
+        <header className="h-12 border-b border-stone-800 bg-[#0c0a09]/90 backdrop-blur-md px-4 flex items-center justify-between shrink-0 z-10">
+          <div className="flex items-center gap-2 text-xs font-mono">
+            <button
+              type="button"
+              onClick={() => setIsMobileMenuOpen(true)}
+              className="lg:hidden p-1.5 -ml-1.5 rounded-lg text-stone-400 hover:text-white hover:bg-stone-900 transition-colors cursor-pointer"
+              title="Abrir Menú"
+            >
+              <Menu className="w-4 h-4" />
+            </button>
+            <span className="text-stone-500">Azafrán Precios</span>
+            <span className="text-stone-700">/</span>
+            <span className="text-orange-400 font-bold uppercase tracking-wider">
+              {view === "fabrics" ? "TELAS •" : view === "supplies" ? "INSUMOS •" : view}
+            </span>
+          </div>
+          <div className="flex items-center gap-3">
+            {isSaving && <span className="text-orange-500 text-xs animate-pulse font-mono">Guardando...</span>}
+            <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[10px] font-mono">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+              <span>Sincronizado</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setIsBackupOpen(true)}
+              className="p-1.5 rounded-lg bg-stone-900 border border-stone-800 text-stone-300 hover:text-orange-400 transition-colors cursor-pointer"
+              title="Copia de Seguridad"
+            >
+              <ShieldCheck className="w-4 h-4 text-orange-500" />
+            </button>
+          </div>
+        </header>
+
+        {feedback && (
+          <div className="px-4 md:px-6 pt-4 shrink-0">
+            <div
+              className={cn(
+                "p-3 rounded-xl text-xs font-mono flex items-center justify-between gap-3 border transition-all animate-in fade-in slide-in-from-top-2",
+                feedback.type === "success"
+                  ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-300"
+                  : "bg-red-500/10 border-red-500/30 text-red-300"
+              )}
+            >
+              <div className="flex items-center gap-2">
+                {feedback.type === "success" ? (
+                  <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                ) : (
+                  <AlertTriangle className="w-4 h-4 text-red-400 shrink-0" />
+                )}
+                <span>{feedback.text}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setFeedback(null)}
+                className="text-stone-400 hover:text-white text-xs px-1 cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Main Viewport: Automatically resizes and re-flows with sidebar width */}
+        <main className="flex-1 h-full overflow-y-auto overflow-x-hidden min-w-0 p-4 md:p-6 lg:p-8">
+          {renderActiveView()}
+        </main>
+      </div>
 
       <BackupModal
         isOpen={isBackupOpen}

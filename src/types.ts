@@ -85,6 +85,15 @@ export interface Staff {
   count: number;
 }
 
+export interface AuthorizedUser {
+  id: string;
+  email: string;
+  name: string;
+  role: 'admin' | 'operador' | 'visor';
+  status: 'ACTIVO' | 'INACTIVO';
+  createdAt: string;
+}
+
 export interface GlobalConfig {
   materials: Material[];
   products: Product[];
@@ -94,4 +103,5 @@ export interface GlobalConfig {
   profitMargin: number;
   wholesaleMargin?: number;
   productionCapacity: number;
+  authorizedUsers?: AuthorizedUser[];
 }

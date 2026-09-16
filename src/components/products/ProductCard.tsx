@@ -382,6 +382,8 @@ export function ProductCard({
                             </label>
                             <input
                               type="number"
+                              step="any"
+                              min="0"
                               value={ing.quantity}
                               onWheel={(e) => e.currentTarget.blur()}
                               onChange={(e) =>

@@ -200,4 +200,8 @@ export const DEFAULT_GLOBAL_CONFIG: GlobalConfig = {
   profitMargin: 35,
   wholesaleMargin: 20,
   productionCapacity: 100,
+  authorizedUsers: [
+    { id: 'usr-1', email: 'palvestegui@gmail.com', name: 'Pablo Alvestegui', role: 'admin', status: 'ACTIVO', createdAt: '2026-09-01' },
+    { id: 'usr-2', email: 'doris@azafran.bo', name: 'Doris', role: 'admin', status: 'ACTIVO', createdAt: '2026-09-01' }
+  ],
 };

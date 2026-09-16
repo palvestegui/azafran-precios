@@ -50,7 +50,7 @@ export const PricingMatrixTable: React.FC<PricingMatrixTableProps> = ({
   return (
     <div className="w-full relative">
       {/* Table Container with dual-axis scroll */}
-      <div className="relative overflow-x-auto overflow-y-auto max-h-[70vh] rounded-2xl border border-stone-800 bg-stone-900/60 shadow-xl backdrop-blur-sm print:max-h-none print:overflow-visible print:border-stone-400">
+      <div className="relative overflow-x-auto overflow-y-auto max-h-[70vh] rounded-lg border border-stone-800 bg-stone-900/60 shadow-xl backdrop-blur-sm print:max-h-none print:overflow-visible print:border-stone-400 w-full px-1">
         <table className="w-full text-left border-collapse min-w-[900px]">
           {/* Header Row (Sticky Top) */}
           <thead className="sticky top-0 z-30 bg-stone-950/95 backdrop-blur-md text-stone-300 shadow-sm print:static print:bg-white print:text-black">
@@ -58,7 +58,7 @@ export const PricingMatrixTable: React.FC<PricingMatrixTableProps> = ({
               {/* Corner Cell (Sticky Top & Left) */}
               <th
                 scope="col"
-                className="sticky left-0 top-0 z-40 bg-stone-950 p-4 border-b border-r border-stone-800 min-w-[220px] max-w-[260px] shadow-[3px_0_8px_rgba(0,0,0,0.5)] print:static print:bg-white print:border-stone-400"
+                className="sticky left-0 top-0 z-40 bg-stone-950 py-1.5 px-2 border-b border-r border-stone-800 min-w-[200px] max-w-[240px] shadow-[3px_0_8px_rgba(0,0,0,0.5)] print:static print:bg-white print:border-stone-400"
               >
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-mono font-bold uppercase tracking-wider text-orange-400">
@@ -75,7 +75,7 @@ export const PricingMatrixTable: React.FC<PricingMatrixTableProps> = ({
                 <th
                   key={fabric.id}
                   scope="col"
-                  className="p-3 text-center border-b border-r border-stone-800/80 min-w-[130px] font-mono print:border-stone-400"
+                  className="py-1.5 px-2 text-center border-b border-r border-stone-800/80 min-w-[120px] font-mono print:border-stone-400"
                 >
                   <div className="text-xs font-bold text-stone-100 whitespace-nowrap">
                     {fabric.name}
@@ -107,7 +107,7 @@ export const PricingMatrixTable: React.FC<PricingMatrixTableProps> = ({
                   {/* Sticky First Column (Garment Name & Consumption) */}
                   <th
                     scope="row"
-                    className="sticky left-0 z-20 bg-stone-950 group-hover:bg-stone-900 border-r border-stone-800 p-3.5 min-w-[220px] max-w-[260px] shadow-[3px_0_8px_rgba(0,0,0,0.5)] print:static print:bg-white print:border-stone-400"
+                    className="sticky left-0 z-20 bg-stone-950 group-hover:bg-stone-900 border-r border-stone-800 py-1.5 px-2 min-w-[200px] max-w-[240px] shadow-[3px_0_8px_rgba(0,0,0,0.5)] print:static print:bg-white print:border-stone-400"
                   >
                     <div className="flex items-center justify-between gap-2">
                       <div className="font-sans font-semibold text-sm text-stone-100 leading-tight">
@@ -184,7 +184,7 @@ export const PricingMatrixTable: React.FC<PricingMatrixTableProps> = ({
                           })
                         }
                         onMouseLeave={() => setHoveredCell(null)}
-                        className="p-2.5 text-center border-r border-stone-800/70 align-middle hover:bg-orange-500/10 transition-colors print:border-stone-400"
+                        className="py-1.5 px-2 text-center border-r border-stone-800/70 align-middle hover:bg-orange-500/10 transition-colors print:border-stone-400"
                       >
                         {!cell.isApplicable ? (
                           <div

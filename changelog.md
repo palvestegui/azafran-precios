@@ -1,5 +1,56 @@
 # Changelog
 
+## [Unreleased] - 2026-09-15
+
+### Sidebar Navigation Polish: Phantom Horizontal Scrollbar Elimination (`App.tsx` & `SidebarNav.tsx`)
+- **What was changed**:
+  - *Root Container Overflow Lock*: Added `overflow-x-hidden overflow-y-hidden` to both the desktop and mobile drawer `<aside>` wrappers in `App.tsx` and the root container of `SidebarNav.tsx`, ensuring the sidebar cannot generate horizontal scrolling at any width.
+  - *Scrollable Navigation Rail Sanitization*: Updated the inner navigation container to `flex-1 overflow-y-auto overflow-x-hidden py-2 space-y-4 custom-scrollbar select-none`.
+  - *Collapsible Section Headers*: Render uppercase category labels when expanded (`!isCollapsed`) and convert them into subtle, centered dividers (`w-8 mx-auto my-1 border-b border-stone-800`) when collapsed.
+  - *Constrained Navigation Item Targets*: Centered item buttons strictly as `justify-center px-0 w-10 mx-auto py-2` when collapsed versus `justify-start px-3 py-2 w-full` when expanded, preventing label expansion from widening `scrollWidth`. Labels are completely unmounted in collapsed mode (`{!isCollapsed && ...}`).
+  - *Compact User / Governance Dock*: In collapsed mode, centered only the avatar (`w-8 h-8 rounded-full`) with an overflow-hidden wrapper, hiding the user name and status badges. In collapsed mode, hovering over the avatar reveals an inline logout action overlay while completely preventing horizontal push.
+- **Verification**:
+  - Verified `tsc --noEmit` and `compile_applet` pass with zero errors.
+  - Rule 300/500 line limits satisfied (`SidebarNav.tsx`: 225 lines, `App.tsx`: 424 lines). Zero `any` types.
+
+### In-Flow Flexbox Architecture & Root Sidebar Collapse Lift (`App.tsx` & `SidebarNav.tsx`)
+- **What was changed**:
+  - *Lifted Collapse State to Root*: Elevated `isSidebarCollapsed` state to root `App.tsx` using persistent key `azafran_sidebar_collapsed`, establishing a single unified source of truth for both the navigation rail and the main viewport layout.
+  - *In-Flow Desktop Sidebar*: Demolished `fixed left-0 top-0`, fixed margin offsets (`ml-64`, `pl-64`, `ml-16`), and static inline `style={{ marginLeft: ... }}` hacks. Rebuilt root viewport as an In-Flow Flexbox (`flex h-screen w-screen overflow-hidden bg-stone-950`).
+  - *Dynamic Viewport Flow*: Configured desktop `<aside className={cn("hidden lg:flex ...", isSidebarCollapsed ? "w-16" : "w-64")}>` and dynamic main container (`flex-1 flex flex-col h-full min-w-0 overflow-hidden`). Expanding or collapsing the sidebar smoothly pushes content rightward or pulls it flush leftward with zero overlay or clipping.
+  - *Mobile Drawer Experience*: Added a responsive mobile drawer (`lg:hidden`) activated via top bar burger menu with backdrop blur, allowing seamless mobile and tablet navigation without affecting desktop flex dynamics.
+  - *Zero Component-Level Margins*: Confirmed all view wrappers (`ProductsView`, `AccessoriesView`, `MaterialsView`, etc.) run in clean, responsive flex flows with zero hardcoded offsets.
+- **Verification**:
+  - Validated with `compile_applet` and `lint_applet` (`tsc --noEmit`). Verified Rule 300/500 compliance (`App.tsx`: 424 lines, `SidebarNav.tsx`: 200 lines). Zero `any` types.
+
+### Universal Draft Isolation in Products Workbench (`ProductsView.tsx`)
+- **What was changed**:
+  - *Draft State Isolation*: Implemented isolated local draft buffering (`draftProduct`) for the active garment in `ProductsView.tsx`. All field inputs (name, effort/weight, default fabric, meters/unit, allowed fabric tags, and ingredients/costos fijos) mutate exclusively the draft state, eliminating instant auto-save side-effects to the global configuration.
+  - *Dirty State Engine*: Added live `isDirty` calculation comparing `draftProduct` with canonical `selectedProduct`. Indicators provide immediate visual feedback in the left garment rail (pulsing amber dot) and the right editor canvas.
+  - *Sticky Action Dock*: Added a persistent bottom action bar with status indicators (`✓ Al día con el catálogo` vs `Cambios pendientes de confirmación`), along with explicit "Descartar" (restores canonical product clone) and "Guardar Cambios" (commits draft to global config with notification).
+  - *Navigation Shield Guard*: Intercepted garment switching and "Nueva Prenda" clicks when uncommitted changes exist, presenting a confirmation modal to avoid accidental loss of draft data.
+  - *Modularization & Rule 300/500 Compliance*: Extracted `NavigationShieldModal.tsx`, `ProductIngredientsTable.tsx`, and `ProductProjectedPrices.tsx` into modular sub-components, bringing `ProductsView.tsx` from 565 lines down to 423 lines, fully compliant with Rule 500.
+- **Verification**:
+  - Passed `compile_applet` and `lint_applet` (`tsc --noEmit`) with 0 errors and 0 warnings. All inputs properly configured with `onWheel` blur guards.
+
+### ProfitView Overhaul: Full-Bleed 12-Column Layout & 4-Column Widescreen Recipe Grid
+- **What was changed**:
+  - *Executive Top Split*: Replaced the original `md:grid-cols-2` top layout with a full-bleed 12-column grid. The Left Panel (`lg:col-span-7`) now cleanly houses the 'Parámetros de Costeo' with embedded save/discard buttons. The Right Panel (`lg:col-span-5`) was condensed into a high-density 'Carga Fija' breakdown, dropping the oversized padding and patronizing text in favor of a sleek 3-column itemized mini-strip (Planilla, Regulares, Diarios).
+  - *Widescreen Recipe Grid*: Upgraded the 'Proyección por Receta' container to a full-width 4-column responsive grid (`grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4`). Excluded standalone secondary accessories so the grid focuses exclusively on confection garments.
+  - *UI Compactness & Wheel Guards*: Implemented `onWheel={(e) => e.currentTarget.blur()}` across all sliders to eliminate accidental scroll mutations. Compressed card heights, spacing, and inner paddings for a denser, more executive dashboard aesthetic.
+- **Verification**:
+  - Validated changes via `compile_applet` and `tsc --noEmit` (0 TypeScript errors). `ProfitView.tsx` safely maintains Rule 500 compliance.
+
+### Visual & Functional Fixes: Fractional Input, Logo Restoration, Header Renaming, User Edit Modal, and Decoupled Insumos/Telas
+- **What was changed**:
+  - *User Edit Modal*: Implemented a dark-themed interactive modal in `UsersView.tsx` allowing administrators to safely edit a user's name, email, role (`admin`, `operador`, `visor`), and status (`ACTIVO`, `INACTIVO`).
+  - *Decoupling Insumos & Telas*: Segregated the unified 'Materiales' section into distinct 'Insumos' and 'Telas' views in the `SidebarNav`. Extended `MaterialsView.tsx` with a `mode` prop (`'all'`, `'fabrics'`, `'supplies'`) to isolate rendering, reducing visual noise and optimizing catalog management focus. Breadcrumbs were updated to explicitly indicate the current context.
+  - *Decimal Precision for Ingredients*: Modified the ingredient quantity input (`CANT.`) in `ProductCard.tsx` (Insumos section) to use `step="any"` and `min="0"`. This ensures users can freely enter fractional quantities (e.g., 0.05, 0.025) without browser validation errors or snapping behaviors.
+  - *Authentic Brand Logo in Sidebar*: Replaced the temporary orange placeholder in `SidebarNav.tsx` with the authentic circular crest from `public/logo.png`. Refactored the header layout to ensure the white circular crest remains perfectly visible and centered in both expanded and collapsed states while maintaining toggle functionality.
+  - *Staff View Table Header*: Renamed the table header 'TOTAL FILA' to 'TOTAL MENSUAL (BS)' in `StaffView.tsx` for clearer financial context.
+- **Verification**:
+  - Validated all changes via `compile_applet` ensuring a successful build with 0 TypeScript errors. All modified files strictly adhere to the 300/500 line limit rules.
+
 ## [Unreleased] - 2026-09-05
 
 ### Two-Way Variant Pricing Overrides, Cross-Catalog Margin Sentinel Alert, and Action Bar Layout Collision Fix
@@ -487,3 +538,20 @@
 - Transitioned to Full-Stack Express + Vite architecture.
 - Enforced Bolivian Commercial Integer Rounding Rule (Math.round) for all retail and wholesale price calculations.
 - Migrated /mcp to direct, stateless JSON-RPC 2.0 to support Gemini Spark integration.
+
+## [Unreleased] - 2026-09-15
+- **Problem**: Giant 40% black voids, low visual density, horizontal navbar clutter, and lack of authorized users access control.
+- **Cause**: Root App.tsx clamped main to max-w-7xl with rigid top navbar.
+- **Resolution**: Built collapsible SidebarNav (w-60/w-16), 48px breadcrumb top bar, unclamped full-bleed main viewport, added AuthorizedUser schema and UsersView.
+- **Compliance**: Rule 300/500 met. SidebarNav.tsx (184 lines), UsersView.tsx (208 lines), App.tsx (307 lines).
+
+## [Unreleased] - 2026-09-15
+- **Problem**: Inefficient use of screen space, oversized cards causing excessive scrolling, missing accessories dedicated view, and authorized users not auto-seeding.
+- **Cause**: Initial design relied on tall UI cards and accordions. Accessories were mixed into materials or missing a view. Current user was not being injected into authorized pool safely.
+- **Resolution**: Systemic density overhaul. 
+  - Restructured ProductsView into a dual-pane workbench with instant final price projections.
+  - Converted Staff, RegularPayments, and DailyExpenses views into high-density tables with dirty draft tracking.
+  - Added dedicated AccessoriesView for direct material management.
+  - Detached formulas from PricingMatrix into a toggle popover and unclamped the matrix table.
+  - Fixed config validation and App mount logic to auto-seed current user into AuthorizedUsers.
+- **Compliance**: Rule 300/500 met. Passed `tsc --noEmit` and `npm run lint` with 0 errors. No `any` types escaping boundary lines, fully type-safe tables. Wheel events blurred.

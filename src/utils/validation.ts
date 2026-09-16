@@ -8,6 +8,7 @@ import {
   Unit,
   PaymentPeriod,
   VariantPriceOverride,
+  AuthorizedUser,
 } from "../types";
 import { DEFAULT_GLOBAL_CONFIG } from "../data/defaultCatalog";
 
@@ -247,6 +248,20 @@ export function validateStaff(raw: unknown): Staff | null {
   return { id, name, role, monthlySalary, count };
 }
 
+export function validateAuthorizedUser(raw: unknown): AuthorizedUser | null {
+  if (!isRecord(raw)) return null;
+  const id = sanitizeString(raw.id);
+  const email = sanitizeString(raw.email);
+  const name = sanitizeString(raw.name);
+  if (!id || !email) return null;
+  const roleStr = sanitizeString(raw.role);
+  const role: 'admin' | 'operador' | 'visor' = ['admin', 'operador', 'visor'].includes(roleStr) ? (roleStr as 'admin' | 'operador' | 'visor') : 'visor';
+  const statusStr = sanitizeString(raw.status);
+  const status: 'ACTIVO' | 'INACTIVO' = ['ACTIVO', 'INACTIVO'].includes(statusStr) ? (statusStr as 'ACTIVO' | 'INACTIVO') : 'ACTIVO';
+  const createdAt = sanitizeString(raw.createdAt) || new Date().toISOString().split('T')[0];
+  return { id, email, name, role, status, createdAt };
+}
+
 export function validateAndNormalizeGlobalConfig(
   raw: unknown,
   fallback: GlobalConfig
@@ -273,6 +288,17 @@ export function validateAndNormalizeGlobalConfig(
     ? raw.staff.map(validateStaff).filter((s): s is Staff => s !== null)
     : fallback.staff;
 
+  let authorizedUsers = Array.isArray(raw.authorizedUsers)
+    ? raw.authorizedUsers.map(validateAuthorizedUser).filter((u): u is AuthorizedUser => u !== null)
+    : fallback.authorizedUsers;
+
+  if (!authorizedUsers || authorizedUsers.length === 0) {
+    authorizedUsers = [
+      { id: 'usr-1', email: 'palvestegui@gmail.com', name: 'Pablo Alvestegui', role: 'admin', status: 'ACTIVO', createdAt: '2026-09-01' },
+      { id: 'usr-2', email: 'doris@azafran.bo', name: 'Doris', role: 'admin', status: 'ACTIVO', createdAt: '2026-09-01' }
+    ];
+  }
+
   return {
     materials: Array.isArray(raw.materials) ? materials : fallback.materials,
     products: Array.isArray(raw.products) ? products : fallback.products,
@@ -285,5 +311,6 @@ export function validateAndNormalizeGlobalConfig(
     ),
     profitMargin: sanitizeNumber(raw.profitMargin, fallback.profitMargin),
     wholesaleMargin: sanitizeNumber(raw.wholesaleMargin, fallback.wholesaleMargin ?? 20),
+    authorizedUsers: authorizedUsers,
   };
 }
