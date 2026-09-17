@@ -357,7 +357,13 @@ export default function App() {
             <span className="text-stone-500">Azafrán Precios</span>
             <span className="text-stone-700">/</span>
             <span className="text-orange-400 font-bold uppercase tracking-wider">
-              {view === "fabrics" ? "TELAS •" : view === "supplies" ? "INSUMOS •" : view}
+              {view === "products"
+                ? "TALLER DE PRENDAS"
+                : view === "fabrics"
+                ? "TELAS •"
+                : view === "supplies"
+                ? "INSUMOS •"
+                : view}
             </span>
           </div>
           <div className="flex items-center gap-3">
@@ -407,7 +413,7 @@ export default function App() {
         )}
 
         {/* Main Viewport: Automatically resizes and re-flows with sidebar width */}
-        <main className="flex-1 h-full overflow-y-auto overflow-x-hidden min-w-0 p-4 md:p-6 lg:p-8">
+        <main className="w-full h-full p-2 pt-1 flex-1 overflow-y-auto">
           {renderActiveView()}
         </main>
       </div>

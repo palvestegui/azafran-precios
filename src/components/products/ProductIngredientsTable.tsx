@@ -51,11 +51,11 @@ export function ProductIngredientsTable({
         <table className="w-full text-left text-xs text-stone-300">
           <thead className="bg-stone-900/80 sticky top-0 font-mono text-[10px] uppercase text-stone-500">
             <tr>
-              <th className="px-3 py-2">Insumo</th>
-              <th className="px-3 py-2 w-20">Cant.</th>
-              <th className="px-3 py-2 w-16">Unid.</th>
-              <th className="px-3 py-2 w-20 text-right">Costo</th>
-              <th className="px-2 py-2 w-10 text-center"></th>
+              <th className="px-3 py-2 min-w-[160px] max-w-[240px]">Insumo</th>
+              <th className="px-2 py-2 w-16 text-center">Cant.</th>
+              <th className="px-2 py-2 w-12 text-center">Unid.</th>
+              <th className="px-2 py-2 w-20 text-right">Costo</th>
+              <th className="px-1 py-2 w-8 text-center"></th>
             </tr>
           </thead>
           <tbody className="divide-y divide-stone-800/50">
@@ -65,15 +65,18 @@ export function ProductIngredientsTable({
               const cost = (mat.pricePerUnit + (mat.extraCosts || 0)) * ing.quantity;
               return (
                 <tr key={ing.materialId} className="hover:bg-stone-800/30">
-                  <td className="px-3 py-2 truncate max-w-[120px]" title={mat.name}>
+                  <td
+                    className="px-3 py-2 min-w-[160px] max-w-[240px] whitespace-normal break-words leading-tight text-xs font-bold text-stone-200"
+                    title={mat.name}
+                  >
                     {mat.name}
                   </td>
-                  <td className="px-3 py-2">
+                  <td className="px-2 py-2 w-16 text-center">
                     <input
                       type="number"
                       min="0"
                       step="any"
-                      className="w-full bg-stone-900 border border-stone-700 rounded px-1.5 py-1 text-white focus:border-amber-500 outline-none text-center font-mono"
+                      className="w-16 bg-stone-900 border border-stone-700 rounded px-1.5 py-1 text-white focus:border-amber-500 outline-none text-center font-mono text-xs"
                       value={ing.quantity || ""}
                       onChange={(e) =>
                         onUpdateIngredient(mat.id, parseFloat(e.target.value) || 0)
@@ -81,15 +84,17 @@ export function ProductIngredientsTable({
                       onWheel={(e) => e.currentTarget.blur()}
                     />
                   </td>
-                  <td className="px-3 py-2 text-stone-500 font-mono">{mat.unit}</td>
-                  <td className="px-3 py-2 text-right font-mono text-amber-500/80">
+                  <td className="px-2 py-2 w-12 text-center text-stone-500 font-mono text-[11px] truncate">
+                    {mat.unit}
+                  </td>
+                  <td className="px-2 py-2 w-20 text-right font-mono text-amber-500/80 whitespace-nowrap text-xs">
                     Bs {cost.toFixed(2)}
                   </td>
-                  <td className="px-2 py-2 text-center">
+                  <td className="px-1 py-2 w-8 text-center">
                     <button
                       type="button"
                       onClick={() => onRemoveIngredient(mat.id)}
-                      className="text-stone-600 hover:text-red-400 p-1 cursor-pointer"
+                      className="text-stone-600 hover:text-red-400 p-1 cursor-pointer transition-colors"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
                     </button>

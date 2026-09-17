@@ -44,48 +44,52 @@ export function DashboardControls({
     activeFabricId !== "";
 
   return (
-    <div className="bg-stone-900 border border-stone-800 rounded-3xl p-6">
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div>
-          <label className="text-xs uppercase font-bold text-stone-500 tracking-widest block mb-2">
-            Seleccionar Producto
-          </label>
-          <select
-            value={selectedProductId}
-            onChange={(e) => onSelectProduct(e.target.value)}
-            className="w-full bg-stone-950 border border-stone-800 rounded-lg p-3 text-white font-bold focus:outline-none focus:border-orange-500"
-          >
-            {products.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name}
-              </option>
-            ))}
-          </select>
-        </div>
+    <div className="flex flex-wrap sm:flex-nowrap items-center gap-2.5 shrink-0">
+      {/* Product Selector */}
+      <div className="flex items-center gap-2 bg-stone-900 border border-stone-800 rounded-lg px-2.5 py-1.5 shadow-sm">
+        <label className="text-[10px] uppercase font-bold text-stone-400 tracking-wider shrink-0">
+          Prenda:
+        </label>
+        <select
+          value={selectedProductId}
+          onChange={(e) => onSelectProduct(e.target.value)}
+          className="bg-transparent text-white font-bold text-xs focus:outline-none cursor-pointer pr-1"
+        >
+          {products.map((p) => (
+            <option key={p.id} value={p.id} className="bg-stone-900 text-white">
+              {p.name}
+            </option>
+          ))}
+        </select>
+      </div>
 
-        <div>
-          <label className="text-xs uppercase font-bold text-emerald-500 tracking-widest block mb-2">
-            Simular con Tela:
-          </label>
-          <select
-            value={activeFabricId}
-            onChange={(e) => onSelectFabric(e.target.value)}
-            className="w-full bg-stone-950 border border-emerald-500/30 rounded-lg p-3 text-emerald-400 font-bold focus:outline-none focus:border-emerald-500"
+      {/* Fabric Simulator Selector */}
+      <div className="flex items-center gap-2 bg-stone-900 border border-emerald-500/40 rounded-lg px-2.5 py-1.5 shadow-sm">
+        <label className="text-[10px] uppercase font-bold text-emerald-400 tracking-wider shrink-0">
+          Tela:
+        </label>
+        <select
+          value={activeFabricId}
+          onChange={(e) => onSelectFabric(e.target.value)}
+          className="bg-transparent text-emerald-300 font-bold text-xs focus:outline-none cursor-pointer pr-1"
+        >
+          <option value="" className="bg-stone-900 text-stone-400">
+            (Sin tela principal)
+          </option>
+          {filteredFabrics.map((m) => (
+            <option key={m.id} value={m.id} className="bg-stone-900 text-white">
+              {m.name}
+            </option>
+          ))}
+        </select>
+        {hasMissingFabricConsumption && (
+          <span
+            title="Configura el consumo (m/un) en Productos para calcular el costo."
+            className="text-orange-400 cursor-help ml-0.5"
           >
-            <option value="">(Sin tela principal)</option>
-            {filteredFabrics.map((m) => (
-              <option key={m.id} value={m.id}>
-                {m.name}
-              </option>
-            ))}
-          </select>
-          {hasMissingFabricConsumption && (
-            <p className="text-orange-500 text-[10px] mt-2 font-bold uppercase tracking-widest flex items-center gap-1">
-              <AlertCircle className="w-3 h-3" />
-              Configura el consumo (m/un) en Productos para calcular el costo.
-            </p>
-          )}
-        </div>
+            <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+          </span>
+        )}
       </div>
     </div>
   );
@@ -177,111 +181,117 @@ export function AccessoryConfigCard({
   const calc = calculateAccessoryBatchPricing(accessory, quantity, materials);
 
   return (
-    <div className="bg-stone-950 border border-stone-800 p-4 rounded-2xl space-y-3 relative group">
+    <div className="bg-stone-950 border border-stone-800 p-4 rounded-xl relative group w-full">
       <button
         type="button"
         onClick={() => onRemove(accessory.id)}
-        className="absolute top-3 right-3 text-stone-500 hover:text-red-400 p-1"
+        className="absolute top-3 right-3 text-stone-500 hover:text-red-400 p-1.5 rounded-lg hover:bg-stone-900 transition-colors cursor-pointer"
         title="Quitar accesorio"
       >
         <X className="w-4 h-4" />
       </button>
 
-      <div className="flex items-start justify-between pr-8">
-        <div>
-          <div className="flex items-center gap-2">
-            <span className="font-bold text-white text-sm">{accessory.name}</span>
-            {isBatch && (
-              <span className="bg-amber-500/20 text-amber-300 text-[10px] font-mono px-2 py-0.5 rounded-full font-bold">
-                Cobro por Lote
+      <div className="flex flex-col md:flex-row gap-4 items-start justify-between pr-8">
+        {/* Left Column: Header & Quantity Controls */}
+        <div className="flex-1 min-w-0 space-y-3 w-full">
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="font-bold text-white text-sm truncate">{accessory.name}</span>
+              {isBatch && (
+                <span className="bg-amber-500/20 text-amber-300 text-[10px] font-mono px-2 py-0.5 rounded-full font-bold shrink-0">
+                  Cobro por Lote
+                </span>
+              )}
+            </div>
+            <p className="text-[11px] text-stone-400 mt-0.5">
+              {isBatch
+                ? `Costo proveedor: Bs ${accessory.pricePerUnit.toFixed(
+                    2
+                  )} por cada bloque de 1 a ${
+                    accessory.batchSize || 6
+                  } unidades`
+                : `Costo unitario: Bs ${accessory.pricePerUnit.toFixed(2)}`}
+            </p>
+          </div>
+
+          <div className="bg-stone-900/70 p-2.5 rounded-xl border border-stone-800/80 space-y-2">
+            <div className="flex justify-between items-center">
+              <label className="text-[10px] uppercase font-bold text-stone-400 tracking-wider">
+                Cantidad en este pedido:
+              </label>
+              <span className="font-mono text-xs font-bold text-amber-400">
+                {quantity} {quantity === 1 ? "unidad" : "unidades"}
               </span>
+            </div>
+            <div className="flex gap-2 items-center">
+              <input
+                type="number"
+                min="1"
+                value={quantity}
+                onWheel={(e) => e.currentTarget.blur()}
+                onChange={(e) =>
+                  onUpdateQuantity(accessory.id, parseInt(e.target.value) || 1)
+                }
+                className="w-16 bg-stone-950 border border-stone-700 rounded-lg p-1.5 text-amber-400 font-mono font-bold text-center text-xs focus:outline-none focus:border-amber-500 shrink-0"
+              />
+              <div className="flex flex-wrap gap-1 flex-1">
+                {[1, 3, 6, 8, 12, 30].map((presetQty) => (
+                  <button
+                    key={presetQty}
+                    type="button"
+                    onClick={() => onUpdateQuantity(accessory.id, presetQty)}
+                    className={`px-2 py-1 rounded text-[10px] font-mono font-bold transition-all cursor-pointer ${
+                      quantity === presetQty
+                        ? "bg-amber-500 text-stone-950 shadow-sm"
+                        : "bg-stone-950 text-stone-400 border border-stone-800 hover:text-white hover:border-stone-700"
+                    }`}
+                  >
+                    {presetQty}u
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Right Column: Economics Chips / Dense Grid */}
+        <div className="w-full md:w-auto md:min-w-[340px] lg:min-w-[420px] shrink-0">
+          <div className="bg-stone-900/60 p-2.5 rounded-xl border border-stone-800/80 space-y-2">
+            {isBatch && (
+              <div className="flex justify-between items-center bg-stone-950/70 px-2.5 py-1.5 rounded-lg border border-stone-800/70 text-xs font-mono">
+                <span className="text-stone-400 text-[11px]">Bloques contratados ({accessory.batchSize || 6}u):</span>
+                <span className="text-white font-bold text-[11px]">
+                  {calc.batchesCount} {calc.batchesCount === 1 ? "lote" : "lotes"} (Bs {calc.totalCost.toFixed(2)})
+                </span>
+              </div>
             )}
+            <div className="grid grid-cols-2 gap-2 text-xs font-mono">
+              <div className="flex flex-col bg-stone-950/70 p-2 rounded-lg border border-stone-800/70">
+                <span className="text-stone-500 text-[10px] uppercase font-bold tracking-wider">Costo Asignado</span>
+                <span className="text-stone-300 font-bold text-xs mt-0.5">
+                  Bs {calc.unitCost.toFixed(2)} <span className="text-[10px] font-normal text-stone-500">/ u</span>
+                </span>
+              </div>
+              <div className="flex flex-col bg-stone-950/70 p-2 rounded-lg border border-stone-800/70">
+                <span className="text-stone-500 text-[10px] uppercase font-bold tracking-wider">Precio Sugerido</span>
+                <span className="text-amber-400 font-bold text-xs mt-0.5">
+                  Bs {calc.unitRetailPrice.toFixed(2)} <span className="text-[10px] font-normal text-stone-500">/ u</span>
+                </span>
+              </div>
+              <div className="flex flex-col bg-stone-950/70 p-2 rounded-lg border border-stone-800/70">
+                <span className="text-stone-500 text-[10px] uppercase font-bold tracking-wider">Cobro Total ({quantity}u)</span>
+                <span className="text-white font-bold text-xs mt-0.5">
+                  Bs {calc.totalRetailPrice.toFixed(2)}
+                </span>
+              </div>
+              <div className="flex flex-col bg-emerald-950/30 p-2 rounded-lg border border-emerald-800/40">
+                <span className="text-emerald-500 text-[10px] uppercase font-bold tracking-wider">Ganancia Neta</span>
+                <span className="text-emerald-400 font-bold text-xs mt-0.5">
+                  +Bs {calc.retailProfit.toFixed(2)}
+                </span>
+              </div>
+            </div>
           </div>
-          <p className="text-[11px] text-stone-400 mt-0.5">
-            {isBatch
-              ? `Costo proveedor: Bs ${accessory.pricePerUnit.toFixed(
-                  2
-                )} por cada bloque de 1 a ${
-                  accessory.batchSize || 6
-                } unidades`
-              : `Costo unitario: Bs ${accessory.pricePerUnit.toFixed(2)}`}
-          </p>
-        </div>
-      </div>
-
-      <div className="bg-stone-900/70 p-3 rounded-xl border border-stone-800 space-y-2">
-        <div className="flex justify-between items-center">
-          <label className="text-[11px] uppercase font-bold text-stone-400">
-            Cantidad en este pedido:
-          </label>
-          <span className="font-mono text-xs font-bold text-amber-400">
-            {quantity} {quantity === 1 ? "unidad" : "unidades"}
-          </span>
-        </div>
-        <div className="flex gap-2 items-center">
-          <input
-            type="number"
-            min="1"
-            value={quantity}
-            onWheel={(e) => e.currentTarget.blur()}
-            onChange={(e) =>
-              onUpdateQuantity(accessory.id, parseInt(e.target.value) || 1)
-            }
-            className="w-20 bg-stone-950 border border-stone-700 rounded-lg p-1.5 text-amber-400 font-mono font-bold text-center text-xs focus:outline-none focus:border-amber-500"
-          />
-          <div className="flex flex-wrap gap-1 flex-1">
-            {[1, 3, 6, 8, 12, 30].map((presetQty) => (
-              <button
-                key={presetQty}
-                type="button"
-                onClick={() => onUpdateQuantity(accessory.id, presetQty)}
-                className={`px-2 py-1 rounded text-[11px] font-mono font-bold transition-all ${
-                  quantity === presetQty
-                    ? "bg-amber-500 text-stone-950"
-                    : "bg-stone-950 text-stone-400 border border-stone-800 hover:text-white"
-                }`}
-              >
-                {presetQty}u
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      <div className="space-y-1.5 text-xs font-mono">
-        {isBatch && (
-          <div className="flex justify-between text-stone-400">
-            <span>Bloques contratados ({accessory.batchSize || 6}u):</span>
-            <span className="text-white font-bold">
-              {calc.batchesCount}{" "}
-              {calc.batchesCount === 1 ? "lote" : "lotes"} (Bs{" "}
-              {calc.totalCost.toFixed(2)})
-            </span>
-          </div>
-        )}
-        <div className="flex justify-between text-stone-400">
-          <span>Costo asignado al accesorio:</span>
-          <span className="text-stone-300">
-            Bs {calc.unitCost.toFixed(2)} / unidad
-          </span>
-        </div>
-        <div className="flex justify-between text-stone-400 pt-1 border-t border-stone-800/80">
-          <span>Precio sugerido (Al detalle):</span>
-          <span className="text-amber-400 font-bold">
-            Bs {calc.unitRetailPrice.toFixed(2)} / u
-          </span>
-        </div>
-        <div className="flex justify-between text-stone-400">
-          <span>Cobro total accesorio ({quantity} u.):</span>
-          <span className="text-white font-bold">
-            Bs {calc.totalRetailPrice.toFixed(2)}
-          </span>
-        </div>
-        <div className="flex justify-between text-stone-400">
-          <span>Ganancia neta accesorio:</span>
-          <span className="text-emerald-400 font-bold">
-            +Bs {calc.retailProfit.toFixed(2)}
-          </span>
         </div>
       </div>
     </div>

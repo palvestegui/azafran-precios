@@ -288,6 +288,33 @@ export function ProfitView({ config, onChange, onNotify }: ProfitViewProps) {
                 activeProjectionConfig,
                 activeFabricId
               );
+
+              const activeOverride =
+                activeFabricId && prod.variantOverrides
+                  ? prod.variantOverrides[activeFabricId]
+                  : undefined;
+
+              const isRetailOverridden = Boolean(
+                activeOverride?.customRetailPrice &&
+                  activeOverride.customRetailPrice > 0
+              );
+              const isWholesaleOverridden = Boolean(
+                activeOverride?.customWholesalePrice &&
+                  activeOverride.customWholesalePrice > 0
+              );
+
+              const displayRetailPrice = isRetailOverridden
+                ? activeOverride!.customRetailPrice!
+                : analysis.recommendedPrice;
+
+              const displayWholesalePrice = isWholesaleOverridden
+                ? activeOverride!.customWholesalePrice!
+                : analysis.recommendedWholesalePrice;
+
+              const displayRetailProfit =
+                displayRetailPrice - analysis.costFloor;
+              const displayWholesaleProfit =
+                displayWholesalePrice - analysis.costFloor;
               return (
                 <div
                   key={prod.id}
@@ -360,16 +387,23 @@ export function ProfitView({ config, onChange, onNotify }: ProfitViewProps) {
                       {/* Retail Section */}
                       <div className="bg-stone-950 p-2 rounded border border-stone-800">
                         <div className="flex justify-between items-end mb-1">
-                          <span className="text-stone-400 font-mono text-[10px] uppercase tracking-widest font-bold">
-                            Menor
-                          </span>
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-stone-400 font-mono text-[10px] uppercase tracking-widest font-bold">
+                              Menor
+                            </span>
+                            {isRetailOverridden && (
+                              <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-400 font-bold border border-amber-500/30">
+                                Fijo
+                              </span>
+                            )}
+                          </div>
                           <span className="font-mono text-orange-400 text-sm font-black">
-                            Bs {analysis.recommendedPrice.toFixed(2)}
+                            Bs {displayRetailPrice.toFixed(2)}
                           </span>
                         </div>
                         <div className="text-[9px] font-mono text-stone-500 flex justify-between">
                           <span>
-                            Margen: <span className="text-orange-400">+Bs {analysis.profitPerUnit.toFixed(2)}</span>
+                            Margen: <span className="text-orange-400">+Bs {displayRetailProfit.toFixed(2)}</span>
                           </span>
                           <span>
                             Eq: <span className="text-white">{Math.ceil(analysis.breakEvenUnits)}</span> u/m
@@ -380,16 +414,23 @@ export function ProfitView({ config, onChange, onNotify }: ProfitViewProps) {
                       {/* Wholesale Section */}
                       <div className="bg-stone-950 p-2 rounded border border-stone-800">
                         <div className="flex justify-between items-end mb-1">
-                          <span className="text-stone-400 font-mono text-[10px] uppercase tracking-widest font-bold">
-                            Mayor
-                          </span>
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-stone-400 font-mono text-[10px] uppercase tracking-widest font-bold">
+                              Mayor
+                            </span>
+                            {isWholesaleOverridden && (
+                              <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-400 font-bold border border-amber-500/30">
+                                Fijo
+                              </span>
+                            )}
+                          </div>
                           <span className="font-mono text-emerald-400 text-sm font-black">
-                            Bs {analysis.recommendedWholesalePrice.toFixed(2)}
+                            Bs {displayWholesalePrice.toFixed(2)}
                           </span>
                         </div>
                         <div className="text-[9px] font-mono text-stone-500 flex justify-between">
                           <span>
-                            Margen: <span className="text-emerald-400">+Bs {analysis.wholesaleProfitPerUnit.toFixed(2)}</span>
+                            Margen: <span className="text-emerald-400">+Bs {displayWholesaleProfit.toFixed(2)}</span>
                           </span>
                           <span>
                             Eq: <span className="text-white">{Math.ceil(analysis.wholesaleBreakEvenUnits)}</span> u/m

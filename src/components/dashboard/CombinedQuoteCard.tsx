@@ -54,16 +54,19 @@ export function CombinedQuoteCard({
   const totalOrderRetail = combinedRetailUnit * referenceQty;
   const totalOrderWholesale = combinedWholesaleUnit * referenceQty;
   const totalOrderProfitRetail = (combinedRetailUnit - combinedCostUnit) * referenceQty;
+  const totalOrderProfitWholesale = (combinedWholesaleUnit - combinedCostUnit) * referenceQty;
 
   return (
-    <div className="bg-amber-500/10 border border-amber-500/30 p-5 rounded-2xl mt-4">
-      <h4 className="text-sm font-black italic text-amber-400 uppercase tracking-wider mb-3">
+    <div className="bg-amber-500/10 border border-amber-500/30 p-4 sm:p-5 rounded-xl mt-4">
+      <h4 className="text-xs font-black italic text-amber-400 uppercase tracking-wider mb-3">
         Cotización Final Combinada (Prenda + Accesorios Seleccionados)
       </h4>
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
-        <div className="bg-stone-950 p-4 rounded-xl border border-stone-800 space-y-2">
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 pt-1">
+        {/* CARD 1: UNIDAD MINORISTA */}
+        <div className="bg-stone-950 p-3.5 rounded-xl border border-stone-800 space-y-2">
           <span className="text-[10px] uppercase font-bold text-stone-400 tracking-wider block">
-            Composición por Unidad
+            Composición por Unidad Minorista
           </span>
           <div className="text-xs space-y-1 font-mono">
             <div className="flex justify-between text-stone-400">
@@ -74,16 +77,17 @@ export function CombinedQuoteCard({
               <span>Accesorios ({selectedAccessoryIds.length}):</span>
               <span className="text-amber-400">+Bs {totalAccRetail.toFixed(2)}</span>
             </div>
-            <div className="flex justify-between text-sm font-bold pt-1 border-t border-stone-800 text-white">
-              <span>Total Terminado:</span>
+            <div className="flex justify-between text-sm font-bold pt-1.5 border-t border-stone-800 text-white">
+              <span>Total Menor:</span>
               <span className="text-emerald-400">Bs {combinedRetailUnit.toFixed(2)}</span>
             </div>
           </div>
         </div>
 
-        <div className="bg-stone-950 p-4 rounded-xl border border-stone-800 space-y-2">
+        {/* CARD 2: UNIDAD MAYORISTA */}
+        <div className="bg-stone-950 p-3.5 rounded-xl border border-stone-800 space-y-2">
           <span className="text-[10px] uppercase font-bold text-stone-400 tracking-wider block">
-            Precio Mayorista con Accesorios
+            Composición por Unidad Mayorista
           </span>
           <div className="text-xs space-y-1 font-mono">
             <div className="flex justify-between text-stone-400">
@@ -94,25 +98,47 @@ export function CombinedQuoteCard({
               <span>Accesorios (Mayor):</span>
               <span className="text-amber-400">+Bs {totalAccWholesale.toFixed(2)}</span>
             </div>
-            <div className="flex justify-between text-sm font-bold pt-1 border-t border-stone-800 text-white">
+            <div className="flex justify-between text-sm font-bold pt-1.5 border-t border-stone-800 text-white">
               <span>Total Mayor:</span>
               <span className="text-emerald-400">Bs {combinedWholesaleUnit.toFixed(2)}</span>
             </div>
           </div>
         </div>
 
-        <div className="bg-stone-950 p-4 rounded-xl border border-stone-800 space-y-2">
+        {/* CARD 3: TOTAL PEDIDO MINORISTA */}
+        <div className="bg-stone-950 p-3.5 rounded-xl border border-stone-800 space-y-2">
           <span className="text-[10px] uppercase font-bold text-amber-400 tracking-wider block">
-            Total Pedido ({referenceQty} prendas terminadas)
+            Total Pedido Minorista ({referenceQty} u.)
           </span>
           <div className="text-xs space-y-1 font-mono">
-            <div className="flex justify-between text-stone-400">
+            <div className="flex justify-between text-stone-400 items-baseline">
               <span>Cobro Total Menor:</span>
-              <span className="text-xl text-white font-black">Bs {totalOrderRetail.toFixed(2)}</span>
+              <span className="text-base text-white font-black">Bs {totalOrderRetail.toFixed(2)}</span>
             </div>
-            <div className="flex justify-between text-stone-400">
+            <div className="flex justify-between text-stone-400 pt-1.5 border-t border-stone-800">
               <span>Ganancia Neta Pedido:</span>
-              <span className="text-emerald-400 font-bold">+Bs {totalOrderProfitRetail.toFixed(2)}</span>
+              <span className="text-emerald-400 font-bold">
+                {totalOrderProfitRetail >= 0 ? "+" : ""}Bs {totalOrderProfitRetail.toFixed(2)}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* CARD 4: TOTAL PEDIDO MAYORISTA */}
+        <div className="bg-stone-950 p-3.5 rounded-xl border border-stone-800 space-y-2">
+          <span className="text-[10px] uppercase font-bold text-amber-400 tracking-wider block">
+            Total Pedido Mayorista ({referenceQty} u.)
+          </span>
+          <div className="text-xs space-y-1 font-mono">
+            <div className="flex justify-between text-stone-400 items-baseline">
+              <span>Cobro Total Mayor:</span>
+              <span className="text-base text-white font-black">Bs {totalOrderWholesale.toFixed(2)}</span>
+            </div>
+            <div className="flex justify-between text-stone-400 pt-1.5 border-t border-stone-800">
+              <span>Ganancia Neta Pedido:</span>
+              <span className="text-emerald-400 font-bold">
+                {totalOrderProfitWholesale >= 0 ? "+" : ""}Bs {totalOrderProfitWholesale.toFixed(2)}
+              </span>
             </div>
           </div>
         </div>

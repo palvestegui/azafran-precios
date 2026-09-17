@@ -97,6 +97,23 @@ export function DashboardView({ config }: { config: GlobalConfig }) {
     ? calculateProductAnalysis(product, config, activeFabricId)
     : null;
 
+  const activeOverride =
+    activeFabricId && product?.variantOverrides
+      ? product.variantOverrides[activeFabricId]
+      : undefined;
+
+  const effectiveRecommendedPrice =
+    activeOverride?.customRetailPrice !== undefined &&
+    activeOverride.customRetailPrice > 0
+      ? activeOverride.customRetailPrice
+      : analysis?.recommendedPrice || 0;
+
+  const effectiveRecommendedWholesalePrice =
+    activeOverride?.customWholesalePrice !== undefined &&
+    activeOverride.customWholesalePrice > 0
+      ? activeOverride.customWholesalePrice
+      : analysis?.recommendedWholesalePrice || 0;
+
   const availableAccessories = config.materials.filter(
     (m) => m.category === "accessory"
   );
@@ -124,106 +141,106 @@ export function DashboardView({ config }: { config: GlobalConfig }) {
   };
 
   return (
-    <div className="space-y-8">
-      <div className="flex justify-between items-end">
+    <div className="space-y-5">
+      {/* INTEGRATED HEADER & SELECTOR TOOLBAR */}
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-4 border-b border-stone-800/80">
         <div>
-          <h2 className="text-2xl font-black italic">Resumen Master</h2>
-          <p className="text-stone-400 text-sm mt-1">
-            Simula tu precio de venta final cambiando la tela y personalizando con
-            accesorios seleccionados.
+          <h2 className="text-xl font-black italic tracking-tight text-white">Resumen Master</h2>
+          <p className="text-stone-400 text-xs mt-0.5">
+            Simula tu precio de venta final cambiando la tela y personalizando con accesorios.
           </p>
         </div>
+
+        <DashboardControls
+          products={allProducts}
+          selectedProductId={activeProductId}
+          onSelectProduct={setSelectedProductId}
+          product={product}
+          materials={config.materials}
+          activeFabricId={activeFabricId}
+          onSelectFabric={setOverrideFabricId}
+        />
       </div>
 
-      <DashboardControls
-        products={allProducts}
-        selectedProductId={activeProductId}
-        onSelectProduct={setSelectedProductId}
-        product={product}
-        materials={config.materials}
-        activeFabricId={activeFabricId}
-        onSelectFabric={setOverrideFabricId}
-      />
-
       {product && analysis && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 bg-stone-900 border border-stone-800 rounded-3xl p-6">
-          <div className="h-[400px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={data}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={80}
-                    outerRadius={140}
-                    paddingAngle={2}
-                    dataKey="value"
-                    label={({ name, percent }) =>
-                      `${name} ${(percent * 100).toFixed(0)}%`
-                    }
-                    labelLine={true}
-                  >
-                    {data.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.color} />
-                    ))}
-                  </Pie>
-                  <Tooltip
-                    formatter={(value: number) => `Bs ${value.toFixed(2)}`}
-                    contentStyle={{
-                      backgroundColor: "#0c0a09",
-                      borderColor: "#292524",
-                      borderRadius: "8px",
-                    }}
-                    itemStyle={{ color: "#fff" }}
-                  />
-                </PieChart>
-              </ResponsiveContainer>
-            </div>
-
-            <MarginCalculatorCard
-              customRetailPrice={customRetailPrice}
-              setCustomRetailPrice={setCustomRetailPrice}
-              customWholesalePrice={customWholesalePrice}
-              setCustomWholesalePrice={setCustomWholesalePrice}
-              costFloor={analysis.costFloor}
-              recommendedPrice={analysis.recommendedPrice}
-              recommendedWholesalePrice={analysis.recommendedWholesalePrice}
-            />
-
-            <div className="space-y-4 max-w-sm mx-auto w-full mt-4 lg:col-span-2">
-              {data.map((item, i) => (
-                <div
-                  key={i}
-                  className="flex justify-between items-center bg-stone-950 p-3 rounded-xl border border-stone-800"
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 bg-stone-900 border border-stone-800 rounded-xl p-4 sm:p-5">
+          <div className="h-[300px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie
+                  data={data}
+                  cx="50%"
+                  cy="50%"
+                  innerRadius={65}
+                  outerRadius={105}
+                  paddingAngle={2}
+                  dataKey="value"
+                  label={({ name, percent }) =>
+                    `${name} ${(percent * 100).toFixed(0)}%`
+                  }
+                  labelLine={true}
                 >
-                  <div className="flex items-center gap-3">
-                    <div
-                      className="w-3 h-3 rounded-full"
-                      style={{ backgroundColor: item.color }}
-                    ></div>
-                    <span className="font-bold text-sm text-stone-300">
-                      {item.name}
-                    </span>
-                  </div>
-                  <span className="font-mono text-white font-bold">
-                    Bs {item.value.toFixed(2)}
+                  {data.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={entry.color} />
+                  ))}
+                </Pie>
+                <Tooltip
+                  formatter={(value: number) => `Bs ${value.toFixed(2)}`}
+                  contentStyle={{
+                    backgroundColor: "#0c0a09",
+                    borderColor: "#292524",
+                    borderRadius: "8px",
+                  }}
+                  itemStyle={{ color: "#fff" }}
+                />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
+
+          <MarginCalculatorCard
+            customRetailPrice={customRetailPrice}
+            setCustomRetailPrice={setCustomRetailPrice}
+            customWholesalePrice={customWholesalePrice}
+            setCustomWholesalePrice={setCustomWholesalePrice}
+            costFloor={analysis.costFloor}
+            recommendedPrice={effectiveRecommendedPrice}
+            recommendedWholesalePrice={effectiveRecommendedWholesalePrice}
+          />
+
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 w-full mt-4 lg:col-span-2 border-t border-stone-800/80 pt-4">
+            {data.map((item, i) => (
+              <div
+                key={i}
+                className="flex items-center justify-between bg-stone-950 px-3 py-2.5 rounded-xl border border-stone-800/80 shadow-sm"
+              >
+                <div className="flex items-center gap-2 min-w-0">
+                  <span
+                    className="w-2.5 h-2.5 rounded-full shrink-0"
+                    style={{ backgroundColor: item.color }}
+                  />
+                  <span className="font-bold text-xs text-stone-300 truncate">
+                    {item.name}
                   </span>
                 </div>
-              ))}
-            </div>
+                <span className="font-mono text-xs text-white font-bold shrink-0 ml-2">
+                  Bs {item.value.toFixed(2)}
+                </span>
+              </div>
+            ))}
           </div>
-        )}
+        </div>
+      )}
 
-      <div className="bg-stone-900 border border-stone-800 rounded-3xl p-6 space-y-6">
-        <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-3 border-b border-stone-800 pb-4">
+      <div className="bg-stone-900 border border-stone-800 rounded-xl p-4 sm:p-5 space-y-4">
+        <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-2 border-b border-stone-800 pb-3">
           <div>
             <div className="flex items-center gap-2">
-              <Layers className="w-5 h-5 text-amber-500" />
-              <h3 className="text-lg font-black italic text-white">
+              <Layers className="w-4 h-4 text-amber-500" />
+              <h3 className="text-base font-black italic text-white">
                 Personalizaciones y Accesorios Seleccionados
               </h3>
             </div>
-            <p className="text-xs text-stone-400 mt-1">
+            <p className="text-xs text-stone-400 mt-0.5">
               Elige solo los accesorios o bordados que deseas cotizar para este
               pedido. Los cobros por lote se calculan escalonados únicamente para
               los accesorios que selecciones.
@@ -238,11 +255,11 @@ export function DashboardView({ config }: { config: GlobalConfig }) {
         />
 
         {selectedAccessoryIds.length > 0 && (
-          <div className="space-y-4 pt-2">
-            <h4 className="text-xs uppercase font-bold text-amber-400 tracking-wider">
+          <div className="space-y-3 pt-1">
+            <h4 className="text-[11px] uppercase font-bold text-amber-400 tracking-wider">
               Detalle de Accesorios en este Pedido:
             </h4>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-3 w-full">
               {selectedAccessoryIds.map((accId) => {
                 const acc = config.materials.find((m) => m.id === accId);
                 if (!acc) return null;
@@ -264,8 +281,8 @@ export function DashboardView({ config }: { config: GlobalConfig }) {
               <CombinedQuoteCard
                 customRetailPrice={customRetailPrice}
                 customWholesalePrice={customWholesalePrice}
-                recommendedPrice={analysis.recommendedPrice}
-                recommendedWholesalePrice={analysis.recommendedWholesalePrice}
+                recommendedPrice={effectiveRecommendedPrice}
+                recommendedWholesalePrice={effectiveRecommendedWholesalePrice}
                 costFloor={analysis.costFloor}
                 selectedAccessoryIds={selectedAccessoryIds}
                 accessoryQuantities={accessoryQuantities}

@@ -1,6 +1,191 @@
 # Changelog
 
+## [Unreleased] - 2026-09-17
+
+### Two-Column Layout Wrap for Garment Controls & Insumos Table (`ProductsView.tsx`)
+- **What was changed**:
+  - *Two-Column Grid Container*: Added a responsive grid wrapper (`grid grid-cols-1 lg:grid-cols-2 gap-4 pb-3 mb-3 border-b border-stone-800/40`) directly above the projected prices in `src/components/views/ProductsView.tsx`.
+  - *Column 1 (Left)*: Grouped existing upper garment configuration controls (Nombre de Prenda, Esfuerzo, Tela Principal, Telas Permitidas dropdown, Metros/Unidad, Duplicar Prenda, and Eliminar Prenda buttons).
+  - *Column 2 (Right)*: Positioned the `<ProductIngredientsTable />` component side-by-side with garment parameters.
+  - *Full-Width Projected Prices*: Retained the `<ProductProjectedPrices />` responsive grid full-width beneath the two-column container.
+- **Verification**:
+  - `src/components/views/ProductsView.tsx` maintained at 464 lines (strictly complies with Rule 500 < 500 lines limit).
+  - Verified with `tsc --noEmit`.
+
+### Workbench Layout Polish: Docked Nueva Prenda, Tight Insumos Table & Projected Prices Grid
+- **What was changed**:
+  - *Docked "+ Nueva Prenda" Button (`ProductsView.tsx`)*: Removed the bottom `+ NUEVA PRENDA` button from the left garment rail, allowing the garment list to stretch 100% to the bottom of the viewport. Rendered the button docked into the top bar runway next to breadcrumbs (`fixed top-2.5 left-[340px] z-50 bg-amber-500/10 border border-amber-500/30 text-amber-400 hover:bg-amber-500/20 px-3 py-1 rounded-xl text-xs font-black uppercase flex items-center gap-1.5 cursor-pointer shadow-sm`).
+  - *Tightened Insumos Table (`ProductIngredientsTable.tsx`)*: Removed `truncate` from the "Insumo" column and applied `min-w-[160px] max-w-[240px] whitespace-normal break-words leading-tight text-xs font-bold text-stone-200` so long supply names wrap to neat lines without column overgrowth. Clustered numeric and action columns neatly to the right (`Cant.` with fixed input width `w-16`, `Unid.` with `w-12 text-center`, `Costo` with `w-20 text-right font-mono whitespace-nowrap`, and delete icon button in `w-8 text-center`).
+  - *Responsive Projected Prices Grid (`ProductProjectedPrices.tsx`)*: Replaced the horizontal scroll container (`flex gap-3 overflow-x-auto`) with a responsive grid (`grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-2.5 pb-2`). Adjusted fabric cards to compact padding (`p-2.5`) with non-truncating headers (`whitespace-normal break-words line-clamp-2 leading-tight`) and compact number inputs.
+- **Verification**:
+  - `src/components/views/ProductsView.tsx` maintained at 462 lines (< 500 lines limit).
+  - `src/components/products/ProductIngredientsTable.tsx` at 118 lines (< 300 lines limit).
+  - `src/components/products/ProductProjectedPrices.tsx` at 250 lines (< 300 lines limit).
+  - Clean compilation with `tsc --noEmit` and `compile_applet`.
+
+### Top-Row AllowedFabricsDropdown Integration & Canvas Cleanup (`ProductsView.tsx`)
+- **What was changed**:
+  - *AllowedFabricsDropdown Integration*: Imported and positioned `<AllowedFabricsDropdown />` in the top parameter row directly adjacent to "Tela Principal".
+  - *State Wiring*: Connected to `draftProduct.allowedFabricIds`, `fabrics` collection, `draftProduct.defaultFabricId` as base fabric, and wired `onChange` via `updateDraftProduct("allowedFabricIds", newAllowed)`.
+  - *Bulky Matrix Removal*: Removed the legacy "TELAS PERMITIDAS (MATRIZ)" card container and wrapped pill grid from the canvas body, streamlining the editing flow directly from top parameters into Insumos and Projected Prices.
+  - *Unused Code Cleanup*: Cleaned up unused `toggleFabric` handler.
+- **Verification**:
+  - `src/components/views/ProductsView.tsx` reduced to 458 lines (well below the 500-line limit of Rule 500).
+  - TypeScript validation (`tsc --noEmit`), linter (`lint_applet`), and production build (`compile_applet`) verified with 0 errors.
+
+### AllowedFabricsDropdown Mini-Component (`AllowedFabricsDropdown.tsx`)
+- **What was changed**:
+  - *New Component*: Created `src/components/products/AllowedFabricsDropdown.tsx` (81 lines, strictly within Rule 300 / Rule 500 limits).
+  - *Trigger UI*: Styled compact trigger button showing `[ Telas Permitidas: (${allowedFabrics.length} activas) ▾ ]` with amber typography and responsive hover borders.
+  - *Popover Menu*: Implemented an absolute popover with backdrop blur, quick-action header buttons (`[ Todas ]` and `[ Ninguna ]`), and an interactive checkbox list.
+  - *Base Fabric Protection*: Enforces `baseFabric` locked as always checked in selection toggles and quick-actions.
+  - *Click Outside Handling*: Added click-outside listener to dismiss popover cleanly.
+- **Verification**:
+  - TypeScript validation (`tsc --noEmit`), linter (`lint_applet`), and production build (`compile_applet`) verified with 0 errors.
+
+### Seamless Frameless Canvas Workspace (`ProductsView.tsx`)
+- **What was changed**:
+  - *Outer Card Containers Removed*: Stripped the two large outer card wrappers (`bg-stone-900`, `bg-stone-900/50`, `border`, `border-stone-800`, `rounded-2xl`, `rounded-3xl`, and outer `p-6`) around the Left Garment Selector and Right Configuration Canvas.
+  - *Left Garment Selector*: Set to sit directly on the black canvas separated by a clean vertical divider (`w-80 h-full flex flex-col pr-3 border-r border-stone-800/50 shrink-0`).
+  - *Right Configuration Canvas*: Set to sit directly on the canvas without card frame (`flex-1 w-full h-full flex flex-col pl-4 overflow-y-auto relative`).
+  - *Seamless Viewport Layout*: Streamlined outer layout to `w-full p-2 pt-0 mt-0 flex flex-1 h-[calc(100vh-65px)] min-h-0 overflow-hidden` with a frameless empty state.
+- **Verification**:
+  - `src/components/views/ProductsView.tsx` maintained at 485 lines (strictly complies with Rule 500 < 500 lines).
+  - TypeScript validation (`tsc --noEmit`), linter (`lint_applet`), and production build (`compile_applet`) verified with 0 errors.
+
+### Frameless Section Styling in Products Workbench (`ProductsView.tsx`)
+- **What was changed**:
+  - *Card Container Stripping*: Stripped card borders, backgrounds, outer padding, and heavy rounded radii from the 3 major configuration sections on the right canvas: "Telas Permitidas (Matriz)", "Insumos & Costos Fijos", and "Precios Finales Proyectados".
+  - *Flat Frameless Sections*: Replaced their wrapper containers with flat, frameless sections (`className="w-full pb-3 mb-3 border-b border-stone-800/40"`), organizing the canvas cleanly into sequential full-width sections divided by subtle bottom borders.
+- **Verification**:
+  - `src/components/views/ProductsView.tsx` maintained at 489 lines (strictly complies with Rule 500 < 500 lines).
+  - TypeScript validation (`tsc --noEmit`), linter (`lint_applet`), and production build (`compile_applet`) verified with 0 errors.
+
+### Workbench Viewport & Edge-to-Edge Layout Polish (`ProductsView.tsx`)
+- **What was changed**:
+  - *Full-Height Left Rail*: Set the left rail to `h-[calc(100vh-65px)] flex flex-col gap-2 min-h-0`, with the garment list spanning `flex-1 overflow-y-auto min-h-0` and pinning the `+ NUEVA PRENDA` button to the bottom (`mt-auto shrink-0`), eliminating the bottom void.
+  - *Full-Width Right Canvas*: Configured the right configuration canvas to `flex-1 w-full h-[calc(100vh-65px)]`, stretching edge-to-edge across the screen width with no horizontal void.
+  - *Flush Top Alignment*: Configured outer workbench container to `pt-0 mt-0 gap-2` and inner grid to `gap-2` so both columns sit flush beneath the top navigation bar.
+- **Verification**:
+  - `src/components/views/ProductsView.tsx` maintained at exactly 488 lines (strictly complies with Rule 500 < 500 lines).
+  - TypeScript validation (`tsc --noEmit`), linter (`lint_applet`), and production build (`compile_applet`) passed with 0 errors.
+
+### Action Pill Docking in Top Bar Runway (`ProductsView.tsx`)
+- **What was changed**:
+  - *Top Bar Docking*: Repositioned action pill from bottom right to `fixed top-2.5 right-44 z-50 bg-stone-900/90 border border-stone-800 px-3 py-1.5 rounded-xl shadow-lg flex items-center gap-2.5 backdrop-blur-md` in `src/components/views/ProductsView.tsx`.
+  - *Compact Controls*: Formatted draft badge with `text-[10px] font-bold text-amber-400`, `[ Descartar ]` with `px-2.5 py-1 text-[10px] font-bold uppercase rounded-lg text-stone-400 hover:text-white`, and `[ Guardar Cambios ]` with `px-3 py-1 text-[10px] font-black uppercase rounded-lg bg-amber-500 hover:bg-amber-400 text-stone-950`.
+- **Verification**:
+  - `src/components/views/ProductsView.tsx` maintained at 488 lines (< 500 lines).
+  - TypeScript validation (`tsc --noEmit`), linter (`lint_applet`), and production build (`compile_applet`) passed with 0 errors.
+
+### Main Viewport Container Layout Adjustment (`App.tsx`)
+- **What was changed**:
+  - *Main Viewport Classes*: Updated `<main>` container wrapping the active views in `src/App.tsx` from `flex-1 h-full overflow-y-auto overflow-x-hidden min-w-0 p-4 md:p-6 lg:p-8` to `w-full h-full p-2 pt-1 flex-1 overflow-y-auto`.
+  - *Outcome*: Removed excessive padding cushions to allow full-bleed widescreen rendering flush against the top bar.
+- **Verification**:
+  - `src/App.tsx` remains 431 lines (well within Rule 500's limit).
+  - TypeScript validation (`tsc --noEmit`), linter (`lint_applet`), and production build (`compile_applet`) passed with 0 errors.
+
+### Full-Bleed Widescreen & Floating Action Pill (`ProductsView.tsx`)
+- **What was changed**:
+  - *Full-Bleed Widescreen Layout*: Set the outer wrapper of `ProductsView.tsx` to `w-full p-2 flex flex-col h-full`, removing unnecessary padding cushion so the two-column workbench fills the entire screen width from edge to edge and sits flush at the top.
+  - *Floating Action Pill*: Replaced the bottom sticky dock with a sleek floating action pill (`fixed bottom-4 right-6 z-40 bg-stone-900/95 border border-stone-800 px-4 py-2 rounded-2xl shadow-2xl flex items-center gap-3`) containing the draft status and Discard/Save buttons, freeing up the bottom view space so columns stretch down cleanly.
+- **Verification**:
+  - `ProductsView.tsx` maintained at exactly 488 lines (strictly complies with Rule 500 < 500 lines).
+  - TypeScript validation (`tsc --noEmit`), linter (`lint_applet`), and production build (`compile_applet`) passed with 0 errors.
+
+### Products Workbench Layout Cleanup & Breadcrumb Alignment (`ProductsView.tsx`, `App.tsx`)
+- **What was changed**:
+  - *Hero Banner Removal*: Completely removed the redundant top header container (`<h2>Taller de Prendas</h2>` and `<p>Configurador y costeador de productos.</p>`) in `ProductsView.tsx`.
+  - *Flush Layout Alignment*: Added `pt-2` to the main container in `ProductsView.tsx` so the two-column workbench sits flush at the top.
+  - *Breadcrumb Alignment*: Updated the top navigation breadcrumb in `App.tsx` from displaying `"products"` to `"TALLER DE PRENDAS"`.
+- **Verification**:
+  - `ProductsView.tsx` line count reduced to 488 lines (strictly satisfies Rule 500 < 500 lines).
+  - TypeScript validation (`tsc --noEmit`), linter (`lint_applet`), and production compilation (`compile_applet`) passed with 0 errors.
+
+### Product Workbench Cloning & Deletion Safeguard (`ProductsView.tsx`, `DeleteProductModal.tsx`)
+- **What was changed**:
+  - *Product Cloning ("Duplicar Prenda")*: Added `[ 📋 Duplicar Prenda ]` action button in the top action bar of the product editor with high-contrast amber styling (`text-amber-400 bg-amber-500/10 border border-amber-500/30 hover:bg-amber-500/20`).
+  - *Cloning Logic*: Clones active product with a unique `garment_${Date.now()}` id, prefixed title `Copia de ${activeProduct.name}`, identical effort (`productionWeight`), fabric consumption (`fabricQuantity`), base fabric (`defaultFabricId`), deep copy of `allowedFabricIds` and `ingredients`, with reset `variantOverrides: {}`.
+  - *Draft State Synchronization*: Immediately selects the newly cloned item in the workbench and triggers the draft changes banner ("● Cambios pendientes de confirmación") and pulsing indicator so the user can immediately rename it and save.
+  - *In-App Deletion Confirmation Modal*: Created `DeleteProductModal.tsx` to eliminate accidental product loss when clicking the trash can icon. Features a state-driven confirmation dialog detailing the permanent loss of recipe ingredients and fabric configuration, with `[ Cancelar ]` and a destructive `[ Sí, Eliminar Prenda ]` button that removes the item, selects the next available product, and commits state.
+- **Verification**:
+  - Confirmed 0 TypeScript diagnostics (`tsc --noEmit`).
+  - Rule 300/500 compliance: `DeleteProductModal.tsx` at 53 lines, `ProductsView.tsx` at 495 lines (strictly < 500 lines).
+  - Strict type safety with zero `any` types.
+  - Linter (`lint_applet`) and production build (`compile_applet`) passed cleanly.
+
 ## [Unreleased] - 2026-09-15
+
+### Rentabilidad Variant Override Integration (`ProfitView.tsx`)
+- **What was changed**:
+  - *Active Variant Override Inspection*: In `ProfitView.tsx`, inspected `prod.variantOverrides` using `activeFabricId`. Evaluated `isRetailOverridden` and `isWholesaleOverridden`.
+  - *Effective Projection Values*: Calculated `displayRetailPrice`, `displayWholesalePrice`, `displayRetailProfit = displayRetailPrice - analysis.costFloor`, and `displayWholesaleProfit = displayWholesalePrice - analysis.costFloor`.
+  - *Custom Price and Fixed Badges*: Updated the product recipe cards to display `displayRetailPrice.toFixed(2)` and `displayWholesalePrice.toFixed(2)`, alongside their respective margins. Rendered a subtle amber `<span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-400 font-bold border border-amber-500/30">Fijo</span>` badge next to "Menor" and "Mayor" whenever a manual override is active.
+- **Verification**:
+  - Confirmed 0 TypeScript diagnostics (`tsc --noEmit`).
+  - File length: 451 lines (strictly satisfies Rule 500 < 500 lines).
+  - Single-file change with zero `any` types.
+  - Linter and compilation verified cleanly (`lint_applet`, `compile_applet`).
+
+### Dashboard Variant Override Integration (`DashboardView.tsx`)
+- **What was changed**:
+  - *Active Variant Override Resolution*: In `DashboardView.tsx`, inspected `product.variantOverrides` using the active fabric id (`activeFabricId`). Extracted `activeOverride?.customRetailPrice` and `activeOverride?.customWholesalePrice`.
+  - *Effective Recommended Pricing*: Calculated `effectiveRecommendedPrice` and `effectiveRecommendedWholesalePrice` by falling back to `analysis.recommendedPrice` and `analysis.recommendedWholesalePrice` only when no manual override is active.
+  - *Child Cards Prop Synchronization*: Updated both `<MarginCalculatorCard ... />` and `<CombinedQuoteCard ... />` to receive `recommendedPrice={effectiveRecommendedPrice}` and `recommendedWholesalePrice={effectiveRecommendedWholesalePrice}`, aligning simulated pricing across the Dashboard with the Products Workbench and Matriz de Precios.
+- **Verification**:
+  - Confirmed 0 TypeScript diagnostics (`tsc --noEmit`).
+  - Linter and compilation verified cleanly (`lint_applet`, `compile_applet`).
+  - File length: 298 lines (complies with Rule 500 < 500 lines) with strict type safety and zero `any` types.
+
+### Interactive Projected Price Overrides (`ProductProjectedPrices.tsx`)
+- **What was changed**:
+  - *Editable Variant Pricing Inputs*: In the bottom "Precios Finales Proyectados" strip, transformed read-only projections into interactive numeric inputs for retail (Menudeo) and wholesale (Mayor) prices.
+  - *Variant Overrides Integration*: Inspected existing `draftProduct.variantOverrides?.[fabric.id]` for `customRetailPrice` and `customWholesalePrice`. Displayed active custom values or the automated calculation as placeholder (`analysis.recommendedPrice.toFixed(0)` / `analysis.recommendedWholesalePrice.toFixed(0)`).
+  - *Dynamic Overrides Mutator & Reset*: Typing whole numbers updates `draftProduct.variantOverrides[fabric.id]`, deleting fields if 0 or cleared. Added a reset button (`<RotateCcw size={11} />`) to revert customized fabrics back to automated pricing.
+  - *Change Detection Synchronization*: Ensured parent dirty state is triggered so the sticky "Guardar Cambios" dock lights up dynamically when custom values are entered.
+- **Verification**:
+  - Confirmed 0 TypeScript diagnostics (`tsc --noEmit`).
+  - Linter and production build passed cleanly (`lint_applet`, `compile_applet`).
+  - File length: 247 lines (strictly satisfies Rule 500 < 500 lines) with zero `any` types.
+
+### Combined Quote Symmetrical 4-Card Grid (`CombinedQuoteCard.tsx`)
+- **What was changed**:
+  - *Wholesale Order Profit Calculations*: Computed `totalOrderWholesale` and `totalOrderProfitWholesale = (combinedWholesaleUnit - combinedCostUnit) * referenceQty` alongside retail metrics.
+  - *Symmetrical 4-Column Grid*: Refactored the cards container from 3 columns (`md:grid-cols-3`) to a symmetrical 4-card grid (`grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 pt-1`) wrapped in a crisp `rounded-xl p-4 sm:p-5` container:
+    - Card 1: *Composición por Unidad Minorista* (Prenda base, Accesorios, Total Menor).
+    - Card 2: *Composición por Unidad Mayorista* (Prenda base Mayor, Accesorios Mayor, Total Mayor).
+    - Card 3: *Total Pedido Minorista* (Cobro Total Menor, Ganancia Neta Pedido Minorista).
+    - Card 4: *Total Pedido Mayorista* (Cobro Total Mayor, Ganancia Neta Pedido Mayorista).
+- **Verification**:
+  - Confirmed 0 TypeScript errors (`tsc --noEmit`).
+  - Production build successfully compiled (`compile_applet`).
+  - File strictly satisfies Rule 500 line limits (149 lines) with zero `any` types.
+
+### Dashboard Header & Toolbar Integration (`DashboardView.tsx` & `DashboardControls.tsx`)
+- **What was changed**:
+  - *Unified Top Row Action Bar*: Merged the title block ("Resumen Master") and simulation controls into a single responsive top bar (`flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-4 border-b border-stone-800/80`).
+  - *Stripped Outer Card*: Eliminated the bulky standalone outer wrapper card from `DashboardControls.tsx`, reclaiming ~120px of vertical height. Rendered the product and fabric selectors as an inline flex cluster with compact tags and dropdowns (`rounded-lg px-2.5 py-1.5`).
+  - *De-Rounded Card Aesthetics*: Standardized card wrappers across `DashboardView.tsx` from `rounded-2xl` / `rounded-3xl` to crisp, industrial `rounded-xl` and `rounded-lg` borders.
+- **Verification**:
+  - Confirmed 0 TypeScript errors (`tsc --noEmit`).
+  - Successfully verified production build with `compile_applet`.
+  - Compliant with Rule 300/500 line limits (`DashboardView.tsx`: 281 lines, `DashboardControls.tsx`: 301 lines) and zero `any` types.
+
+### Dashboard Industrial Density Overhaul (`DashboardView.tsx` & `DashboardControls.tsx`)
+- **What was changed**:
+  - *Single-Row Donut Cost Metrics*: Refactored the vertical stack of 4 colored cost metrics (Materiales, Mano de Obra, Gastos Fijos, Ganancia Menor) into a sleek, full-width 4-column horizontal grid (`grid grid-cols-2 lg:grid-cols-4 gap-2.5 w-full mt-4 lg:col-span-2 border-t border-stone-800/80 pt-4`) directly underneath the chart, eliminating vertical dead space.
+  - *Horizontal Accessory Configuration Stretch*: Demolished the narrow vertical stack of `AccessoryConfigCard` and replaced it with a responsive internal 2-column split (`flex-col md:flex-row gap-4 items-start justify-between`). Left column houses the accessory title, badge, cost description, and quantity selector with quick preset buttons; right column provides a high-density economics grid showing Bloques contratados, Costo asignado, Precio sugerido, Cobro total, and Ganancia neta.
+  - *Elimination of Lateral Void*: Converted the active accessory list container from a 2-column grid (`grid-cols-1 md:grid-cols-2`) to a full-width container (`grid-cols-1 gap-3 w-full`), allowing accessory cards to stretch across the full analysis canvas without leaving an empty right-hand void.
+  - *De-bloated Cards & Compact Sizing*:
+    - Replaced bubbly `rounded-3xl` radii with clean, industrial `rounded-2xl` and `rounded-xl`.
+    - Reduced oversized container padding from `p-6` to `p-4 sm:p-5`.
+    - Compacted simulation toolbar labels from `mb-2 text-xs` to `mb-1 text-[11px]` and selects to `p-2 text-sm`.
+    - Reduced donut chart container height from `h-[400px]` to `h-[300px]` with adjusted radii (`innerRadius={65}`, `outerRadius={105}`), enabling the entire analysis to fit cleanly within standard viewport heights without vertical scrolling.
+- **Verification**:
+  - Confirmed 0 TypeScript errors (`tsc --noEmit`).
+  - Verified compilation build succeeds.
+  - Confirmed strict compliance with Rule 300/500 line limits (`DashboardView.tsx`: 281 lines, `DashboardControls.tsx`: 297 lines) and zero `any` types.
 
 ### Sidebar Navigation Polish: Phantom Horizontal Scrollbar Elimination (`App.tsx` & `SidebarNav.tsx`)
 - **What was changed**:
