@@ -43,6 +43,7 @@ export function ProductCard({
     draftProduct,
     isDirty,
     updateDraft,
+    updateVariantOverride,
     addIngredient,
     updateIngredient,
     removeIngredient,
@@ -59,20 +60,7 @@ export function ProductCard({
     fabricId: string,
     override: VariantPriceOverride | null
   ) => {
-    const current = { ...(draftProduct.variantOverrides || {}) };
-    if (
-      !override ||
-      (override.customRetailPrice === undefined &&
-        override.customWholesalePrice === undefined)
-    ) {
-      delete current[fabricId];
-    } else {
-      current[fabricId] = override;
-    }
-    updateDraft({
-      variantOverrides:
-        Object.keys(current).length > 0 ? current : undefined,
-    });
+    updateVariantOverride(fabricId, override);
   };
 
   return (

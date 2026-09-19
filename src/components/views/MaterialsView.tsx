@@ -1,44 +1,53 @@
 import React, { useState } from "react";
-import { Plus } from "lucide-react";
-import { GlobalConfig, Material } from "../../types";
-import { MaterialCard } from "../materials/MaterialCard";
-import { DEFAULT_RETAIL_MARGIN, DEFAULT_WHOLESALE_MARGIN } from "../../utils/calculations";
-import { checkMaterialPriceImpact, MarginRiskItem } from "../../utils/marginSentinel";
+import { Plus, Trash2 } from "lucide-react";
+import { GlobalConfig, Material, Unit } from "../../types";
+import {
+  DEFAULT_RETAIL_MARGIN,
+  DEFAULT_WHOLESALE_MARGIN,
+  convertUnitCost,
+} from "../../utils/calculations";
+import { isUnit } from "../../utils/validation";
+import {
+  checkMaterialPriceImpact,
+  MarginRiskItem,
+} from "../../utils/marginSentinel";
 import { MarginSentinelModal } from "../materials/MarginSentinelModal";
 
 export interface MaterialsViewProps {
-  mode?: "all" | "fabrics" | "supplies";
   config: GlobalConfig;
   onChange: (c: GlobalConfig) => void;
   onNotify?: (text: string, type: "success" | "error" | "info") => void;
-  onNavigate?: (view: "products" | "materials" | "pricingMatrix" | "dashboard") => void;
+  onNavigate?: (
+    view: "products" | "materials" | "pricingMatrix" | "dashboard"
+  ) => void;
+  // Allows the view to be controlled either via prop or via internal toggle
+  mode?: "all" | "fabrics" | "supplies";
 }
 
 export function MaterialsView({
-  mode = "all",
   config,
   onChange,
   onNotify,
   onNavigate,
+  mode = "all",
 }: MaterialsViewProps) {
   const [sentinelRisks, setSentinelRisks] = useState<MarginRiskItem[]>([]);
   const [sentinelMaterialName, setSentinelMaterialName] = useState<string>("");
   const [isSentinelOpen, setIsSentinelOpen] = useState(false);
+  const [searchFilter, setSearchFilter] = useState<string>("");
 
-  const addMaterial = (
-    category: "fabric" | "other" | "accessory" = "other"
-  ) => {
+  const addMaterial = (category: "fabric" | "other") => {
     const newId = crypto.randomUUID
       ? crypto.randomUUID()
       : Math.random().toString(36).substring(2, 9);
 
     const newMaterial: Material = {
       id: newId,
-      name: category === "fabric" ? "Nueva Tela" : "Nuevo Material",
+      name: category === "fabric" ? "Nueva Tela" : "Nuevo Insumo",
       category,
       unit: category === "fabric" ? "m" : "unit",
       pricePerUnit: 0,
-      wastagePercentage: category === "fabric" ? 5 : 0,
+      wastagePercentage: category === "fabric" ? 3 : 0,
     };
 
     onChange({
@@ -69,10 +78,8 @@ export function MaterialsView({
   };
 
   const saveMaterial = (updated: Material) => {
-    // 1. Audit cross-catalog margin risks against fixed variant overrides
     const risks = checkMaterialPriceImpact(updated, config);
 
-    // 2. Commit updated material to state
     onChange({
       ...config,
       materials: config.materials.map((m) =>
@@ -80,7 +87,6 @@ export function MaterialsView({
       ),
     });
 
-    // 3. Trigger Sentinel alert modal if selling prices fall below safe margins
     if (risks.length > 0) {
       setSentinelRisks(risks);
       setSentinelMaterialName(updated.name);
@@ -95,112 +101,272 @@ export function MaterialsView({
     }
   };
 
+  const updateMaterialField = <K extends keyof Material>(
+    id: string,
+    field: K,
+    value: Material[K]
+  ) => {
+    const target = config.materials.find((m) => m.id === id);
+    if (!target) return;
+    saveMaterial({ ...target, [field]: value });
+  };
+
   const defaultRetail = config.profitMargin || DEFAULT_RETAIL_MARGIN;
   const defaultWholesale = config.wholesaleMargin || DEFAULT_WHOLESALE_MARGIN;
 
-  const fabrics = config.materials.filter((m) => m.category === "fabric");
-  const otherMaterials = config.materials.filter((m) => m.category === "other");
+  const fabrics = config.materials
+    .filter((m) => m.category === "fabric")
+    .filter((m) =>
+      searchFilter.trim() === ""
+        ? true
+        : m.name.toLowerCase().includes(searchFilter.toLowerCase())
+    );
+
+  const supplies = config.materials
+    .filter((m) => m.category === "other")
+    .filter((m) =>
+      searchFilter.trim() === ""
+        ? true
+        : m.name.toLowerCase().includes(searchFilter.toLowerCase())
+    );
+
+  const showFabrics = mode === "all" || mode === "fabrics";
+  const showSupplies = mode === "all" || mode === "supplies";
 
   return (
-    <div className="space-y-10">
-      {/* FABRICS SECTION */}
-      {(mode === "all" || mode === "fabrics") && (
-        <div className="space-y-6">
-          <div className="flex justify-between items-end border-b border-stone-800 pb-4">
+    <div className="space-y-8">
+      {/* 1. TELAS COMMAND TABLE (When mode is 'all' or 'fabrics') */}
+      {showFabrics && (
+        <div className="space-y-4">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-3 border-b border-stone-800 pb-4">
             <div>
               <h2 className="text-2xl font-black italic text-white">
                 Telas Principales
               </h2>
               <p className="text-stone-400 text-sm mt-1">
-                Registra la forma de compra y precio de tus telas. Todos los
-                cambios se guardan explícitamente en cada tarjeta.
+                Catálogo maestro de telas, costos por metro y márgenes proyectados.
               </p>
             </div>
-            <button
-              type="button"
-              onClick={() => addMaterial("fabric")}
-              className="bg-orange-500/10 text-orange-500 border border-orange-500/30 px-4 py-2 rounded-xl flex items-center gap-2 hover:bg-orange-500/20 font-mono text-xs uppercase tracking-widest font-bold active:scale-95 transition-all cursor-pointer"
-            >
-              <Plus className="w-3 h-3" /> Agregar Tela
-            </button>
+            <div className="flex items-center gap-3 w-full sm:w-auto">
+              <input
+                type="text"
+                value={searchFilter}
+                onChange={(e) => setSearchFilter(e.target.value)}
+                placeholder="Buscar tela..."
+                className="bg-stone-900 border border-stone-800 rounded-xl px-3 py-2 text-xs text-white placeholder:text-stone-500 focus:outline-none focus:border-orange-500 w-full sm:w-48"
+              />
+              <button
+                type="button"
+                onClick={() => addMaterial("fabric")}
+                className="bg-orange-500 text-black px-4 py-2 rounded-xl flex items-center gap-2 hover:bg-orange-400 font-mono text-xs uppercase tracking-widest font-bold active:scale-95 transition-all cursor-pointer whitespace-nowrap"
+              >
+                <Plus className="w-3.5 h-3.5" /> Agregar Tela
+              </button>
+            </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-            {fabrics.map((mat) => (
-              <MaterialCard
-                key={mat.id}
-                material={mat}
-                allMaterials={config.materials}
-                onSave={saveMaterial}
-                onRemove={removeMaterial}
-                onNotify={onNotify}
-                defaultRetailMargin={defaultRetail}
-                defaultWholesaleMargin={defaultWholesale}
-              />
-            ))}
-            {fabrics.length === 0 && (
-              <div className="col-span-full text-center py-10 bg-stone-900/30 border border-dashed border-stone-800 rounded-2xl text-stone-500 text-sm">
-                No hay telas registradas. Haz clic en "Agregar Tela" para comenzar.
-              </div>
-            )}
+          <div className="w-full bg-stone-900/60 rounded-xl border border-stone-800/80 overflow-hidden shadow-sm">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="border-b border-stone-800 bg-stone-950/80 text-[11px] font-mono uppercase tracking-wider text-stone-400">
+                    <th className="py-3 px-4">Tela</th>
+                    <th className="py-3 px-3 w-28">Unidad</th>
+                    <th className="py-3 px-3 w-32">Costo / Metro (Bs)</th>
+                    <th className="py-3 px-3 w-24">Merma (%)</th>
+                    <th className="py-3 px-4 w-44">Costo Real / Metro</th>
+                    <th className="py-3 px-3 w-32">Margen</th>
+                    <th className="py-3 px-3 w-16 text-center">Acción</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-stone-800/60">
+                  {fabrics.map((mat) => {
+                    const effective = (mat.pricePerUnit || 0) * (1 + (mat.wastagePercentage || 0) / 100);
+                    return (
+                      <tr key={mat.id} className="hover:bg-stone-800/30 transition-colors group">
+                        <td className="py-2.5 px-4">
+                          <input
+                            type="text"
+                            defaultValue={mat.name}
+                            onBlur={(e) => updateMaterialField(mat.id, "name", e.target.value)}
+                            className="bg-transparent text-white font-bold text-sm w-full border-b border-transparent hover:border-stone-700 focus:border-orange-500 focus:outline-none"
+                          />
+                        </td>
+                        <td className="py-2.5 px-3 font-mono text-xs text-stone-400">Metro</td>
+                        <td className="py-2.5 px-3">
+                          <input
+                            type="number"
+                            step="0.5"
+                            defaultValue={mat.pricePerUnit || 0}
+                            onWheel={(e) => e.currentTarget.blur()}
+                            onBlur={(e) => updateMaterialField(mat.id, "pricePerUnit", Number(e.target.value))}
+                            className="w-full bg-stone-950 border border-stone-800 rounded-lg p-1.5 text-xs font-mono text-amber-400 text-right focus:outline-none focus:border-orange-500"
+                          />
+                        </td>
+                        <td className="py-2.5 px-3">
+                          <input
+                            type="number"
+                            step="0.5"
+                            defaultValue={mat.wastagePercentage || 0}
+                            onWheel={(e) => e.currentTarget.blur()}
+                            onBlur={(e) => updateMaterialField(mat.id, "wastagePercentage", Number(e.target.value))}
+                            className="w-full bg-stone-950 border border-stone-800 rounded-lg p-1.5 text-xs font-mono text-red-400 text-right focus:outline-none focus:border-orange-500"
+                          />
+                        </td>
+                        <td className="py-2.5 px-4 font-mono">
+                          <span className="text-sm font-bold text-amber-400">
+                            Bs {effective.toFixed(2)}
+                          </span>
+                          <span className="text-[10px] text-stone-500 ml-1">/ m</span>
+                        </td>
+                        <td className="py-2.5 px-3 font-mono text-[10px] text-stone-400">
+                          {mat.retailMargin ? `${mat.retailMargin}% / ${mat.wholesaleMargin}%` : `Global (${defaultRetail}/${defaultWholesale})`}
+                        </td>
+                        <td className="py-2.5 px-3 text-center">
+                          <button
+                            type="button"
+                            onClick={() => removeMaterial(mat.id)}
+                            className="text-stone-600 hover:text-red-400 p-1 transition-colors"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       )}
 
-      {/* OTHER INGREDIENTS SECTION */}
-      {(mode === "all" || mode === "supplies") && (
-        <div className="space-y-6">
-          <div className="flex justify-between items-end border-b border-stone-800 pb-4">
+      {/* 2. INSUMOS COMMAND TABLE (When mode is 'all' or 'supplies') */}
+      {showSupplies && (
+        <div className="space-y-4">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-3 border-b border-stone-800 pb-4">
             <div>
               <h2 className="text-2xl font-black italic text-white">
                 Insumos y Materiales Secundarios
               </h2>
               <p className="text-stone-400 text-sm mt-1">
-                Hilos, cierres, botones, etiquetas, servicios externos o cobros
-                por lote.
+                Hilos, cierres, botones, elásticos y servicios con costo atómico unitario.
               </p>
             </div>
-            <button
-              type="button"
-              onClick={() => addMaterial("other")}
-              className="bg-orange-500/10 text-orange-500 border border-orange-500/30 px-4 py-2 rounded-xl flex items-center gap-2 hover:bg-orange-500/20 font-mono text-xs uppercase tracking-widest font-bold active:scale-95 transition-all cursor-pointer"
-            >
-              <Plus className="w-3 h-3" /> Agregar Insumo
-            </button>
+            <div className="flex items-center gap-3 w-full sm:w-auto">
+              <input
+                type="text"
+                value={searchFilter}
+                onChange={(e) => setSearchFilter(e.target.value)}
+                placeholder="Buscar insumo..."
+                className="bg-stone-900 border border-stone-800 rounded-xl px-3 py-2 text-xs text-white placeholder:text-stone-500 focus:outline-none focus:border-orange-500 w-full sm:w-48"
+              />
+              <button
+                type="button"
+                onClick={() => addMaterial("other")}
+                className="bg-orange-500 text-black px-4 py-2 rounded-xl flex items-center gap-2 hover:bg-orange-400 font-mono text-xs uppercase tracking-widest font-bold active:scale-95 transition-all cursor-pointer whitespace-nowrap"
+              >
+                <Plus className="w-3.5 h-3.5" /> Agregar Insumo
+              </button>
+            </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-            {otherMaterials.map((mat) => (
-              <MaterialCard
-                key={mat.id}
-                material={mat}
-                allMaterials={config.materials}
-                onSave={saveMaterial}
-                onRemove={removeMaterial}
-                onNotify={onNotify}
-                defaultRetailMargin={defaultRetail}
-                defaultWholesaleMargin={defaultWholesale}
-              />
-            ))}
-            {otherMaterials.length === 0 && (
-              <div className="col-span-full text-center py-10 bg-stone-900/30 border border-dashed border-stone-800 rounded-2xl text-stone-500 text-sm">
-                No hay insumos secundarios registrados. Haz clic en "Agregar
-                Insumo".
-              </div>
-            )}
+          <div className="w-full bg-stone-900/60 rounded-xl border border-stone-800/80 overflow-hidden shadow-sm">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="border-b border-stone-800 bg-stone-950/80 text-[11px] font-mono uppercase tracking-wider text-stone-400">
+                    <th className="py-3 px-4">Insumo</th>
+                    <th className="py-3 px-3 w-36">Presentación / Unidad</th>
+                    <th className="py-3 px-3 w-32">Costo Compra (Bs)</th>
+                    <th className="py-3 px-3 w-24">Merma (%)</th>
+                    <th className="py-3 px-4 w-44">Costo Efectivo / Unidad</th>
+                    <th className="py-3 px-3 w-32">Margen</th>
+                    <th className="py-3 px-3 w-16 text-center">Acción</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-stone-800/60">
+                  {supplies.map((mat) => {
+                    const baseCost = convertUnitCost(mat.pricePerUnit || 0, mat.unit, mat.batchSize);
+                    const effective = baseCost * (1 + (mat.wastagePercentage || 0) / 100);
+
+                    return (
+                      <tr key={mat.id} className="hover:bg-stone-800/30 transition-colors group">
+                        <td className="py-2.5 px-4">
+                          <input
+                            type="text"
+                            defaultValue={mat.name}
+                            onBlur={(e) => updateMaterialField(mat.id, "name", e.target.value)}
+                            className="bg-transparent text-white font-bold text-sm w-full border-b border-transparent hover:border-stone-700 focus:border-orange-500 focus:outline-none"
+                          />
+                        </td>
+                        <td className="py-2.5 px-3">
+                          <select
+                            value={mat.unit}
+                            onChange={(e) => isUnit(e.target.value) && updateMaterialField(mat.id, "unit", e.target.value as Unit)}
+                            className="w-full bg-stone-950 border border-stone-800 rounded-lg p-1.5 text-xs font-mono text-orange-400 focus:outline-none"
+                          >
+                            <option value="unit">Unidad</option>
+                            <option value="100pack">Ciento (100u)</option>
+                            <option value="dozen">Docena (12u)</option>
+                            <option value="spool">Cono</option>
+                            <option value="m">Metro</option>
+                            <option value="service">Servicio</option>
+                            <option value="batch">Lote / Bloque</option>
+                          </select>
+                        </td>
+                        <td className="py-2.5 px-3">
+                          <input
+                            type="number"
+                            step="0.01"
+                            defaultValue={mat.pricePerUnit || 0}
+                            onWheel={(e) => e.currentTarget.blur()}
+                            onBlur={(e) => updateMaterialField(mat.id, "pricePerUnit", Number(e.target.value))}
+                            className="w-full bg-stone-950 border border-stone-800 rounded-lg p-1.5 text-xs font-mono text-amber-400 text-right focus:outline-none"
+                          />
+                        </td>
+                        <td className="py-2.5 px-3">
+                          <input
+                            type="number"
+                            step="0.5"
+                            defaultValue={mat.wastagePercentage || 0}
+                            onWheel={(e) => e.currentTarget.blur()}
+                            onBlur={(e) => updateMaterialField(mat.id, "wastagePercentage", Number(e.target.value))}
+                            className="w-full bg-stone-950 border border-stone-800 rounded-lg p-1.5 text-xs font-mono text-red-400 text-right focus:outline-none"
+                          />
+                        </td>
+                        <td className="py-2.5 px-4 font-mono font-bold text-amber-400 text-sm">
+                          Bs {effective.toFixed(3)}
+                        </td>
+                        <td className="py-2.5 px-3 font-mono text-[10px] text-stone-400">
+                          {mat.retailMargin ? `${mat.retailMargin}% / ${mat.wholesaleMargin}%` : `Global (${defaultRetail}/${defaultWholesale})`}
+                        </td>
+                        <td className="py-2.5 px-3 text-center">
+                          <button
+                            type="button"
+                            onClick={() => removeMaterial(mat.id)}
+                            className="text-stone-600 hover:text-red-400 p-1 transition-colors"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       )}
 
-      {/* Sentinel Alert Modal */}
+      {/* Cross-Catalog Margin Sentinel Modal */}
       <MarginSentinelModal
         isOpen={isSentinelOpen}
         risks={sentinelRisks}
         materialName={sentinelMaterialName}
         onClose={() => setIsSentinelOpen(false)}
-        onViewProducts={
-          onNavigate ? () => onNavigate("products") : undefined
-        }
+        onViewProducts={onNavigate ? () => onNavigate("products") : undefined}
       />
     </div>
   );

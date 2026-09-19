@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { Product, ProductIngredient, Material } from "../types";
+import { Product, ProductIngredient, Material, VariantPriceOverride } from "../types";
 
 export interface UseProductDraftOptions {
   product: Product;
@@ -11,18 +11,33 @@ export interface UseProductDraftReturn {
   draftProduct: Product;
   isDirty: boolean;
   updateDraft: (updates: Partial<Product>) => void;
-  addIngredient: (
-    category: "fabric" | "other" | "accessory",
-    materials: Material[]
-  ) => boolean;
-  updateIngredient: (
-    index: number,
-    updates: Partial<ProductIngredient>
-  ) => void;
+  updateVariantOverride: (fabricId: string, override: VariantPriceOverride | null) => void;
+  addIngredient: (category: "fabric" | "other" | "accessory", materials: Material[]) => boolean;
+  updateIngredient: (index: number, updates: Partial<ProductIngredient>) => void;
   removeIngredient: (index: number) => void;
   saveDraft: () => void;
   discardDraft: () => void;
   statusMessage: { text: string; type: "success" | "info" } | null;
+}
+
+function cleanOverrides(
+  overrides?: Record<string, VariantPriceOverride>
+): Record<string, VariantPriceOverride> | undefined {
+  if (!overrides) return undefined;
+  const result: Record<string, VariantPriceOverride> = {};
+  for (const k of Object.keys(overrides)) {
+    const v = overrides[k];
+    if (
+      v &&
+      (v.customRetailPrice !== undefined || v.customWholesalePrice !== undefined)
+    ) {
+      result[k] = {
+        customRetailPrice: v.customRetailPrice,
+        customWholesalePrice: v.customWholesalePrice,
+      };
+    }
+  }
+  return Object.keys(result).length > 0 ? result : undefined;
 }
 
 function cloneProduct(p: Product): Product {
@@ -30,28 +45,17 @@ function cloneProduct(p: Product): Product {
     ...p,
     ingredients: p.ingredients ? p.ingredients.map((ing) => ({ ...ing })) : [],
     allowedFabricIds: p.allowedFabricIds ? [...p.allowedFabricIds] : undefined,
-    variantOverrides: p.variantOverrides
-      ? Object.fromEntries(
-          Object.entries(p.variantOverrides).map(([k, v]) => [k, { ...v }])
-        )
-      : undefined,
+    variantOverrides: cleanOverrides(p.variantOverrides),
   };
 }
 
 function areProductsEqual(a: Product, b: Product): boolean {
-  if (a.id !== b.id) return false;
-  if (a.name !== b.name) return false;
+  if (a.id !== b.id || a.name !== b.name) return false;
   if ((a.defaultFabricId || "") !== (b.defaultFabricId || "")) return false;
-  if (Number(a.fabricQuantity || 0) !== Number(b.fabricQuantity || 0))
-    return false;
-  if (Number(a.profitMargin || 0) !== Number(b.profitMargin || 0))
-    return false;
-  if (Number(a.wholesaleMargin || 0) !== Number(b.wholesaleMargin || 0))
-    return false;
-  if (
-    Number(a.productionWeight ?? 1.0) !== Number(b.productionWeight ?? 1.0)
-  )
-    return false;
+  if (Number(a.fabricQuantity || 0) !== Number(b.fabricQuantity || 0)) return false;
+  if (Number(a.profitMargin || 0) !== Number(b.profitMargin || 0)) return false;
+  if (Number(a.wholesaleMargin || 0) !== Number(b.wholesaleMargin || 0)) return false;
+  if (Number(a.productionWeight ?? 1.0) !== Number(b.productionWeight ?? 1.0)) return false;
 
   const aAllowed = a.allowedFabricIds ? [...a.allowedFabricIds].sort() : [];
   const bAllowed = b.allowedFabricIds ? [...b.allowedFabricIds].sort() : [];
@@ -62,28 +66,42 @@ function areProductsEqual(a: Product, b: Product): boolean {
 
   if (a.ingredients.length !== b.ingredients.length) return false;
   for (let i = 0; i < a.ingredients.length; i++) {
-    if (a.ingredients[i].materialId !== b.ingredients[i].materialId)
-      return false;
-    if (
-      Number(a.ingredients[i].quantity || 0) !==
-      Number(b.ingredients[i].quantity || 0)
-    )
-      return false;
+    if (a.ingredients[i].materialId !== b.ingredients[i].materialId) return false;
+    if (Number(a.ingredients[i].quantity || 0) !== Number(b.ingredients[i].quantity || 0)) return false;
   }
 
-  // Compare variantOverrides
-  const aOverrides = a.variantOverrides || {};
-  const bOverrides = b.variantOverrides || {};
-  const aKeys = Object.keys(aOverrides).sort();
-  const bKeys = Object.keys(bOverrides).sort();
+  // Deep comparison of variantOverrides
+  const aClean = cleanOverrides(a.variantOverrides) || {};
+  const bClean = cleanOverrides(b.variantOverrides) || {};
+  const aKeys = Object.keys(aClean).sort();
+  const bKeys = Object.keys(bClean).sort();
+
   if (aKeys.length !== bKeys.length) return false;
   for (let i = 0; i < aKeys.length; i++) {
     const k = aKeys[i];
     if (k !== bKeys[i]) return false;
-    if (aOverrides[k]?.customRetailPrice !== bOverrides[k]?.customRetailPrice)
-      return false;
-    if (aOverrides[k]?.customWholesalePrice !== bOverrides[k]?.customWholesalePrice)
-      return false;
+    const aOverride = aClean[k];
+    const bOverride = bClean[k];
+
+    const aRetail =
+      aOverride.customRetailPrice !== undefined
+        ? Number(aOverride.customRetailPrice)
+        : undefined;
+    const bRetail =
+      bOverride.customRetailPrice !== undefined
+        ? Number(bOverride.customRetailPrice)
+        : undefined;
+    if (aRetail !== bRetail) return false;
+
+    const aWholesale =
+      aOverride.customWholesalePrice !== undefined
+        ? Number(aOverride.customWholesalePrice)
+        : undefined;
+    const bWholesale =
+      bOverride.customWholesalePrice !== undefined
+        ? Number(bOverride.customWholesalePrice)
+        : undefined;
+    if (aWholesale !== bWholesale) return false;
   }
 
   return true;
@@ -122,11 +140,59 @@ export function useProductDraft({
   }, [statusMessage]);
 
   const updateDraft = useCallback((updates: Partial<Product>) => {
-    setDraftProduct((prev) => ({
-      ...prev,
-      ...updates,
-    }));
+    setDraftProduct((prev) => {
+      const nextOverrides =
+        updates.variantOverrides !== undefined
+          ? cleanOverrides(updates.variantOverrides)
+          : prev.variantOverrides;
+
+      return {
+        ...prev,
+        ...updates,
+        ...(updates.variantOverrides !== undefined
+          ? { variantOverrides: nextOverrides }
+          : {}),
+      };
+    });
   }, []);
+
+  const updateVariantOverride = useCallback(
+    (fabricId: string, override: VariantPriceOverride | null) => {
+      setDraftProduct((prev) => {
+        const isCleared =
+          !override ||
+          (override.customRetailPrice === undefined &&
+            override.customWholesalePrice === undefined);
+
+        const nextOverrides: Record<string, VariantPriceOverride> = {};
+        if (prev.variantOverrides) {
+          const current = prev.variantOverrides;
+          for (const k of Object.keys(current)) {
+            const v = current[k];
+            if (k !== fabricId && v) {
+              nextOverrides[k] = {
+                customRetailPrice: v.customRetailPrice,
+                customWholesalePrice: v.customWholesalePrice,
+              };
+            }
+          }
+        }
+
+        if (!isCleared && override) {
+          nextOverrides[fabricId] = {
+            customRetailPrice: override.customRetailPrice,
+            customWholesalePrice: override.customWholesalePrice,
+          };
+        }
+
+        return {
+          ...prev,
+          variantOverrides: cleanOverrides(nextOverrides),
+        };
+      });
+    },
+    []
+  );
 
   const addIngredient = useCallback(
     (
@@ -212,6 +278,7 @@ export function useProductDraft({
     draftProduct,
     isDirty,
     updateDraft,
+    updateVariantOverride,
     addIngredient,
     updateIngredient,
     removeIngredient,

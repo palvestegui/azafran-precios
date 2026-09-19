@@ -1,17 +1,29 @@
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import { GlobalConfig, Material, Product } from "../../types";
 import {
   calculateMatrixCell,
-  MatrixCellResult,
   MatrixViewMode,
+  exportMatrixToCsv,
 } from "../../utils/pricingMatrix";
-import { Info, Scissors, Layers } from "lucide-react";
+import { exportMatrixToPdf } from "../../utils/matrixPdfExport";
+import {
+  Scissors,
+  Search,
+  Check,
+  Layers,
+  FileSpreadsheet,
+  Printer,
+  ShoppingBag,
+  Store,
+  Info,
+  CheckCircle2,
+} from "lucide-react";
 
 interface PricingMatrixTableProps {
   products: Product[];
   fabrics: Material[];
   config: GlobalConfig;
-  mode: MatrixViewMode;
+  mode?: MatrixViewMode;
   onUpdateProductMeters?: (productId: string, newMeters: number) => void;
 }
 
@@ -19,285 +31,336 @@ export const PricingMatrixTable: React.FC<PricingMatrixTableProps> = ({
   products,
   fabrics,
   config,
-  mode,
+  mode: initialMode = "combined",
   onUpdateProductMeters,
 }) => {
-  const [editingProductId, setEditingProductId] = useState<string | null>(null);
+  const [selectedProdId, setSelectedProdId] = useState<string>(products[0]?.id || "");
+  const [searchQuery, setSearchQuery] = useState<string>("");
+  const [editingMeters, setEditingMeters] = useState<boolean>(false);
   const [tempMeters, setTempMeters] = useState<string>("");
-  const [hoveredCell, setHoveredCell] = useState<{
-    prodId: string;
-    fabricId: string;
-    result: MatrixCellResult;
-    prodName: string;
-    fabricName: string;
-  } | null>(null);
+  const [currentMode, setCurrentMode] = useState<MatrixViewMode>(initialMode);
+  const [showFormulas, setShowFormulas] = useState<boolean>(false);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
 
-  const fabricList = fabrics.filter((m) => m.category === "fabric");
+  const fabricList = useMemo(() => fabrics.filter((m) => m.category === "fabric"), [fabrics]);
 
-  const startEditMeters = (prod: Product) => {
-    setEditingProductId(prod.id);
-    setTempMeters(String(prod.fabricQuantity || 0));
+  const filteredProducts = useMemo(() => {
+    if (!searchQuery.trim()) return products;
+    const q = searchQuery.toLowerCase();
+    return products.filter((p) => p.name.toLowerCase().includes(q));
+  }, [products, searchQuery]);
+
+  const activeProduct = useMemo(
+    () => products.find((p) => p.id === selectedProdId) || filteredProducts[0] || products[0],
+    [products, filteredProducts, selectedProdId]
+  );
+
+  const fabricLadder = useMemo(() => {
+    if (!activeProduct) return [];
+    const allowedSet = activeProduct.allowedFabricIds ? new Set(activeProduct.allowedFabricIds) : null;
+    const applicable = fabricList.filter((f) => (allowedSet ? allowedSet.has(f.id) : true));
+
+    const items = applicable.map((fabric) => {
+      const cell = calculateMatrixCell(activeProduct, fabric, config);
+      const fabricCost = (fabric.pricePerUnit || 0) * (activeProduct.fabricQuantity || 0) * (1 + (fabric.wastagePercentage || 0) / 100);
+      return { fabric, cell, fabricCost };
+    });
+
+    return items.sort((a, b) => (a.cell.retailPrice || 0) - (b.cell.retailPrice || 0));
+  }, [activeProduct, fabricList, config]);
+
+  const priceRange = useMemo(() => {
+    if (fabricLadder.length === 0) return null;
+    return {
+      minRetail: fabricLadder[0]?.cell.retailPrice || 0,
+      maxRetail: fabricLadder[fabricLadder.length - 1]?.cell.retailPrice || 0,
+      minWholesale: fabricLadder[0]?.cell.wholesalePrice || 0,
+      maxWholesale: fabricLadder[fabricLadder.length - 1]?.cell.wholesalePrice || 0,
+    };
+  }, [fabricLadder]);
+
+  const handleExport = (type: "csv" | "pdf") => {
+    try {
+      const fn = type === "csv"
+        ? exportMatrixToCsv(products, fabricList, config, currentMode)
+        : exportMatrixToPdf(products, fabricList, config, currentMode);
+      setToastMessage(`Matriz exportada como ${fn}`);
+      setTimeout(() => setToastMessage(null), 3000);
+    } catch { /* ignore */ }
   };
 
-  const saveMeters = (productId: string) => {
+  const saveMeters = () => {
     const parsed = parseFloat(tempMeters);
-    if (!isNaN(parsed) && parsed >= 0 && onUpdateProductMeters) {
-      onUpdateProductMeters(productId, parsed);
+    if (!isNaN(parsed) && parsed >= 0 && onUpdateProductMeters && activeProduct) {
+      onUpdateProductMeters(activeProduct.id, parsed);
     }
-    setEditingProductId(null);
+    setEditingMeters(false);
   };
 
   return (
-    <div className="w-full relative">
-      {/* Table Container with dual-axis scroll */}
-      <div className="relative overflow-x-auto overflow-y-auto max-h-[70vh] rounded-lg border border-stone-800 bg-stone-900/60 shadow-xl backdrop-blur-sm print:max-h-none print:overflow-visible print:border-stone-400 w-full px-1">
-        <table className="w-full text-left border-collapse min-w-[900px]">
-          {/* Header Row (Sticky Top) */}
-          <thead className="sticky top-0 z-30 bg-stone-950/95 backdrop-blur-md text-stone-300 shadow-sm print:static print:bg-white print:text-black">
-            <tr>
-              {/* Corner Cell (Sticky Top & Left) */}
-              <th
-                scope="col"
-                className="sticky left-0 top-0 z-40 bg-stone-950 py-1.5 px-2 border-b border-r border-stone-800 min-w-[200px] max-w-[240px] shadow-[3px_0_8px_rgba(0,0,0,0.5)] print:static print:bg-white print:border-stone-400"
-              >
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-mono font-bold uppercase tracking-wider text-orange-400">
-                    Prenda / Confección
-                  </span>
-                  <span className="text-[10px] text-stone-500 font-mono">
-                    (Metros)
-                  </span>
-                </div>
-              </th>
+    <div className="w-full flex flex-col gap-2 h-[calc(100vh-115px)]">
+      {/* INTEGRATED ACTION BAR: All controls on top, ZERO duplicate title */}
+      <div className="flex flex-wrap items-center justify-between gap-2 px-1">
+        <div className="text-xs font-mono text-stone-400 flex items-center gap-2">
+          <span className="w-2 h-2 rounded-full bg-orange-500 animate-pulse" />
+          <span className="font-bold text-stone-200">Cotizador Dinámico</span>
+          <span className="text-stone-500">·</span>
+          <span>{products.length} prendas</span>
+        </div>
 
-              {/* Fabric Columns */}
-              {fabricList.map((fabric) => (
-                <th
-                  key={fabric.id}
-                  scope="col"
-                  className="py-1.5 px-2 text-center border-b border-r border-stone-800/80 min-w-[120px] font-mono print:border-stone-400"
-                >
-                  <div className="text-xs font-bold text-stone-100 whitespace-nowrap">
-                    {fabric.name}
-                  </div>
-                  <div className="flex items-center justify-center gap-1.5 mt-1 text-[11px] text-orange-400 font-medium">
-                    <span>Bs {fabric.pricePerUnit.toFixed(2)}/m</span>
-                    {Boolean(fabric.wastagePercentage) && (
-                      <span className="text-[9px] px-1 py-0.2 rounded bg-stone-800 text-stone-400 font-normal">
-                        +{fabric.wastagePercentage}%
-                      </span>
-                    )}
-                  </div>
-                </th>
-              ))}
-            </tr>
-          </thead>
+        <div className="flex items-center gap-2 font-mono text-xs">
+          <button
+            type="button"
+            onClick={() => setShowFormulas((prev) => !prev)}
+            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-xl border text-xs transition-all ${
+              showFormulas ? "bg-orange-500/20 border-orange-500/50 text-orange-400" : "bg-stone-900 border-stone-800 text-stone-400 hover:text-white"
+            }`}
+          >
+            <Info className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Fórmulas</span>
+          </button>
 
-          {/* Body Rows */}
-          <tbody className="divide-y divide-stone-800/60 font-mono text-xs print:divide-stone-300">
-            {products.map((prod) => {
-              const meters = prod.fabricQuantity || 0;
-              const hasNoMeters = meters <= 0;
-
-              return (
-                <tr
-                  key={prod.id}
-                  className="hover:bg-stone-800/30 transition-colors group"
-                >
-                  {/* Sticky First Column (Garment Name & Consumption) */}
-                  <th
-                    scope="row"
-                    className="sticky left-0 z-20 bg-stone-950 group-hover:bg-stone-900 border-r border-stone-800 py-1.5 px-2 min-w-[200px] max-w-[240px] shadow-[3px_0_8px_rgba(0,0,0,0.5)] print:static print:bg-white print:border-stone-400"
-                  >
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="font-sans font-semibold text-sm text-stone-100 leading-tight">
-                        {prod.name}
-                      </div>
-
-                      {/* Fabric Consumption Badge or Editor */}
-                      {editingProductId === prod.id ? (
-                        <div className="flex items-center gap-1">
-                          <input
-                            type="number"
-                            step="0.1"
-                            min="0"
-                            value={tempMeters}
-                            onWheel={(e) => e.currentTarget.blur()}
-                            onChange={(e) => setTempMeters(e.target.value)}
-                            onKeyDown={(e) => {
-                              if (e.key === "Enter") saveMeters(prod.id);
-                              if (e.key === "Escape") setEditingProductId(null);
-                            }}
-                            className="w-16 px-1.5 py-0.5 text-xs bg-stone-900 border border-orange-500 rounded text-orange-300 font-mono focus:outline-none"
-                            autoFocus
-                          />
-                          <button
-                            onClick={() => saveMeters(prod.id)}
-                            className="text-[10px] bg-orange-500 text-black px-1.5 py-0.5 rounded font-bold hover:bg-orange-400"
-                          >
-                            OK
-                          </button>
-                        </div>
-                      ) : (
-                        <button
-                          onClick={() => startEditMeters(prod)}
-                          title="Clic para ajustar metros por prenda"
-                          className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-mono border transition-all ${
-                            hasNoMeters
-                              ? "bg-red-500/10 border-red-500/30 text-red-400"
-                              : "bg-stone-900 border-stone-700 text-stone-300 hover:border-orange-500/50 hover:text-orange-400"
-                          }`}
-                        >
-                          <Scissors className="w-2.5 h-2.5 opacity-70" />
-                          <span>{hasNoMeters ? "0 m" : `${meters}m`}</span>
-                        </button>
-                      )}
-                    </div>
-
-                    {/* Ingredients count & allowed fabrics tag */}
-                    <div className="flex items-center gap-2 mt-1 text-[10px] text-stone-500 font-normal">
-                      <span>{prod.ingredients.length} avíos</span>
-                      {prod.allowedFabricIds && prod.allowedFabricIds.length > 0 && (
-                        <span className="flex items-center gap-0.5 text-orange-400/80">
-                          <Layers className="w-2.5 h-2.5" />
-                          {prod.allowedFabricIds.length} telas hab.
-                        </span>
-                      )}
-                    </div>
-                  </th>
-
-                  {/* Fabric Matrix Cells */}
-                  {fabricList.map((fabric) => {
-                    const cell = calculateMatrixCell(prod, fabric, config);
-
-                    return (
-                      <td
-                        key={fabric.id}
-                        onMouseEnter={() =>
-                          cell.isApplicable &&
-                          setHoveredCell({
-                            prodId: prod.id,
-                            fabricId: fabric.id,
-                            result: cell,
-                            prodName: prod.name,
-                            fabricName: fabric.name,
-                          })
-                        }
-                        onMouseLeave={() => setHoveredCell(null)}
-                        className="py-1.5 px-2 text-center border-r border-stone-800/70 align-middle hover:bg-orange-500/10 transition-colors print:border-stone-400"
-                      >
-                        {!cell.isApplicable ? (
-                          <div
-                            className="text-stone-500/80 select-none cursor-default font-mono text-xs py-2 italic font-normal"
-                            title={cell.reason || "No aplica"}
-                          >
-                            No aplica
-                          </div>
-                        ) : mode === "retail" ? (
-                          <div className="flex flex-col items-center justify-center py-1">
-                            <span className="text-sm font-bold text-emerald-400 font-mono tracking-tight">
-                              Bs {cell.retailPrice.toFixed(0)}
-                            </span>
-                            <span className="text-[10px] text-stone-400 font-mono">
-                              Bs {cell.retailPrice.toFixed(2)}
-                            </span>
-                          </div>
-                        ) : mode === "wholesale" ? (
-                          <div className="flex flex-col items-center justify-center py-1">
-                            <span className="text-sm font-bold text-blue-400 font-mono tracking-tight">
-                              Bs {cell.wholesalePrice.toFixed(0)}
-                            </span>
-                            <span className="text-[10px] text-stone-400 font-mono">
-                              Bs {cell.wholesalePrice.toFixed(2)}
-                            </span>
-                          </div>
-                        ) : (
-                          /* Combined Mode: Minorista / Mayorista stacked */
-                          <div className="flex flex-col items-center justify-center gap-0.5 py-0.5">
-                            <div className="flex items-center justify-center gap-1 font-mono text-xs font-bold">
-                              <span className="text-emerald-400" title="Precio Minorista">
-                                Bs {cell.retailPrice.toFixed(0)}
-                              </span>
-                              <span className="text-stone-500">/</span>
-                              <span className="text-blue-400" title="Precio Mayorista">
-                                Bs {cell.wholesalePrice.toFixed(0)}
-                              </span>
-                            </div>
-                            <div className="text-[9px] text-stone-400 font-mono">
-                              Min / May
-                            </div>
-                          </div>
-                        )}
-                      </td>
-                    );
-                  })}
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
-
-      {/* Floating Detailed Cost Breakdown Tooltip / Inspector */}
-      {hoveredCell && (
-        <div className="mt-3 p-3 bg-stone-900 border border-stone-800 rounded-xl flex flex-wrap items-center justify-between gap-4 text-xs font-mono animate-in fade-in duration-150 print:hidden">
-          <div className="flex items-center gap-2">
-            <Info className="w-4 h-4 text-orange-400 shrink-0" />
-            <span className="text-stone-200 font-bold">
-              {hoveredCell.prodName}
-            </span>
-            <span className="text-stone-500">en</span>
-            <span className="text-orange-400 font-medium">
-              {hoveredCell.fabricName}
-            </span>
+          <div className="inline-flex p-0.5 bg-stone-900 border border-stone-800 rounded-xl shadow-inner">
+            <button
+              type="button"
+              onClick={() => setCurrentMode("retail")}
+              className={`flex items-center gap-1 px-2.5 py-1 rounded-lg transition-all ${currentMode === "retail" ? "bg-emerald-500 text-black font-bold shadow" : "text-stone-400 hover:text-white"}`}
+            >
+              <Store className="w-3.5 h-3.5" /> <span>Minorista</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setCurrentMode("wholesale")}
+              className={`flex items-center gap-1 px-2.5 py-1 rounded-lg transition-all ${currentMode === "wholesale" ? "bg-blue-500 text-black font-bold shadow" : "text-stone-400 hover:text-white"}`}
+            >
+              <ShoppingBag className="w-3.5 h-3.5" /> <span>Mayorista</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setCurrentMode("combined")}
+              className={`flex items-center gap-1 px-2.5 py-1 rounded-lg transition-all ${currentMode === "combined" ? "bg-orange-500 text-black font-bold shadow" : "text-stone-400 hover:text-white"}`}
+            >
+              <Layers className="w-3.5 h-3.5" /> <span>Ambos</span>
+            </button>
           </div>
 
-          <div className="flex flex-wrap items-center gap-4 text-[11px]">
-            <div>
-              <span className="text-stone-500">Tela: </span>
-              <span className="text-stone-300">
-                Bs {hoveredCell.result.fabricCost.toFixed(2)}
-              </span>
+          <button type="button" onClick={() => handleExport("csv")} title="Exportar CSV" className="p-1.5 rounded-xl bg-stone-900 border border-stone-800 text-stone-300 hover:text-orange-400 transition-all shadow-sm active:scale-95">
+            <FileSpreadsheet className="w-4 h-4 text-orange-400" />
+          </button>
+          <button type="button" onClick={() => handleExport("pdf")} title="Exportar PDF" className="p-1.5 rounded-xl bg-stone-900 border border-stone-800 text-stone-300 hover:text-orange-400 transition-all shadow-sm active:scale-95">
+            <Printer className="w-4 h-4 text-orange-400" />
+          </button>
+        </div>
+      </div>
+
+      {toastMessage && (
+        <div className="p-2 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs font-mono flex items-center gap-2 animate-in fade-in">
+          <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" /> <span>{toastMessage}</span>
+        </div>
+      )}
+
+      {showFormulas && (
+        <div className="p-3 bg-stone-900/60 border border-stone-800/80 rounded-xl text-xs font-mono text-stone-400 space-y-1 animate-in fade-in">
+          <div className="text-stone-300 font-bold flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-full bg-orange-500" /> <span>Fórmulas de Costeo</span>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-2 text-[11px] text-stone-400 pt-1">
+            <div className="p-2 rounded-lg bg-stone-950/60 border border-stone-800/50">
+              <span className="text-orange-400 font-bold block mb-0.5">1. Materiales</span>
+              <span>Tela (m × Bs/m × (1+Merma)) + Insumos de receta.</span>
             </div>
-            <div>
-              <span className="text-stone-500">Avíos: </span>
-              <span className="text-stone-300">
-                Bs {hoveredCell.result.notionsCost.toFixed(2)}
-              </span>
+            <div className="p-2 rounded-lg bg-stone-950/60 border border-stone-800/50">
+              <span className="text-orange-400 font-bold block mb-0.5">2. Indirectos</span>
+              <span>(Overhead / Capacidad) × Esfuerzo confección.</span>
             </div>
-            <div>
-              <span className="text-stone-500">Mano de obra: </span>
-              <span className="text-stone-300">
-                Bs {hoveredCell.result.laborAllocation.toFixed(2)}
-              </span>
-            </div>
-            <div>
-              <span className="text-stone-500">Costos fijos: </span>
-              <span className="text-stone-300">
-                Bs {hoveredCell.result.overheadAllocation.toFixed(2)}
-              </span>
-            </div>
-            <div className="border-l border-stone-800 pl-3">
-              <span className="text-stone-500">Costo Piso: </span>
-              <span className="text-amber-400 font-bold">
-                Bs {hoveredCell.result.costFloor.toFixed(2)}
-              </span>
-            </div>
-            <div className="border-l border-stone-800 pl-3">
-              <span className="text-stone-500">Min ({hoveredCell.result.retailMargin}%): </span>
-              <span className="text-emerald-400 font-bold">
-                Bs {hoveredCell.result.retailPrice.toFixed(2)}
-              </span>
-            </div>
-            <div>
-              <span className="text-stone-500">May ({hoveredCell.result.wholesaleMargin}%): </span>
-              <span className="text-blue-400 font-bold">
-                Bs {hoveredCell.result.wholesalePrice.toFixed(2)}
-              </span>
+            <div className="p-2 rounded-lg bg-stone-950/60 border border-stone-800/50">
+              <span className="text-orange-400 font-bold block mb-0.5">3. Venta</span>
+              <span>Piso / (1 - Margen %).</span>
             </div>
           </div>
         </div>
       )}
+
+      {/* TWO-COLUMN DECK: GARMENT SELECTOR + PRICING LADDER */}
+      <div className="w-full grid grid-cols-1 lg:grid-cols-12 gap-3 flex-1 overflow-hidden">
+        {/* LEFT COLUMN: GARMENT SELECTOR */}
+        <div className="lg:col-span-4 xl:col-span-3 flex flex-col bg-stone-900/60 border border-stone-800 rounded-2xl overflow-hidden shadow-sm">
+          <div className="p-2.5 border-b border-stone-800/80 bg-stone-950/60">
+            <div className="relative">
+              <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-stone-500" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Buscar prenda..."
+                className="w-full pl-8 pr-3 py-1.5 bg-stone-900 border border-stone-800 rounded-xl text-xs text-white placeholder:text-stone-500 focus:outline-none focus:border-orange-500"
+              />
+            </div>
+            <div className="flex justify-between items-center mt-2 px-1 text-[11px] font-mono text-stone-400">
+              <span>{filteredProducts.length} prendas</span>
+              <span className="text-orange-400">Clic para cotizar</span>
+            </div>
+          </div>
+
+          <div className="flex-1 overflow-y-auto divide-y divide-stone-800/50 p-1.5 space-y-1">
+            {filteredProducts.map((prod) => {
+              const isSelected = activeProduct?.id === prod.id;
+              const meters = prod.fabricQuantity || 0;
+              const allowedCount = prod.allowedFabricIds?.length ?? fabricList.length;
+
+              return (
+                <button
+                  key={prod.id}
+                  type="button"
+                  onClick={() => setSelectedProdId(prod.id)}
+                  className={`w-full text-left p-3 rounded-xl transition-all cursor-pointer flex flex-col gap-1.5 border ${
+                    isSelected ? "bg-orange-500/10 border-orange-500/60 shadow-md shadow-orange-500/5" : "bg-transparent border-transparent hover:bg-stone-800/40 hover:border-stone-800 text-stone-300"
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className={`text-sm font-bold truncate ${isSelected ? "text-orange-400" : "text-stone-100"}`}>{prod.name}</span>
+                    {isSelected && <Check className="w-4 h-4 text-orange-400 shrink-0" />}
+                  </div>
+                  <div className="flex items-center gap-2 text-[11px] font-mono text-stone-400">
+                    <span className="flex items-center gap-1"><Scissors className="w-3 h-3 text-stone-500" />{meters}m</span>
+                    <span>·</span>
+                    <span className="flex items-center gap-1"><Layers className="w-3 h-3 text-stone-500" />{allowedCount} telas</span>
+                  </div>
+                </button>
+              );
+            })}
+            {filteredProducts.length === 0 && (
+              <div className="text-center py-10 text-stone-500 text-xs font-mono">No hay prendas.</div>
+            )}
+          </div>
+        </div>
+
+        {/* RIGHT COLUMN: RANKED PRICING LADDER */}
+        <div className="lg:col-span-8 xl:col-span-9 flex flex-col bg-stone-900/60 border border-stone-800 rounded-2xl overflow-hidden shadow-xl">
+          {activeProduct ? (
+            <>
+              <div className="p-3 border-b border-stone-800 bg-stone-950/80 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-base font-black italic text-white tracking-tight">{activeProduct.name}</h3>
+                    {editingMeters ? (
+                      <div className="flex items-center gap-1">
+                        <input
+                          type="number"
+                          step="0.1"
+                          min="0"
+                          value={tempMeters}
+                          onWheel={(e) => e.currentTarget.blur()}
+                          onChange={(e) => setTempMeters(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") saveMeters();
+                            if (e.key === "Escape") setEditingMeters(false);
+                          }}
+                          className="w-14 px-1 py-0.5 text-xs bg-stone-900 border border-orange-500 rounded text-orange-300 font-mono focus:outline-none"
+                          autoFocus
+                        />
+                        <button type="button" onClick={saveMeters} className="text-[10px] bg-orange-500 text-black px-1.5 py-0.5 rounded font-bold">OK</button>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => { setTempMeters(String(activeProduct.fabricQuantity || 0)); setEditingMeters(true); }}
+                        title="Clic para modificar consumo de tela"
+                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-xs font-mono bg-stone-900 border border-stone-700 text-stone-300 hover:border-orange-500 hover:text-orange-400 cursor-pointer"
+                      >
+                        <Scissors className="w-3 h-3 text-orange-400" />
+                        <span>{activeProduct.fabricQuantity || 0} m/prenda</span>
+                      </button>
+                    )}
+                  </div>
+                  <p className="text-[11px] text-stone-400 font-mono mt-0.5">
+                    {fabricLadder.length} telas habilitadas · {activeProduct.ingredients?.length || 0} insumos en receta
+                  </p>
+                </div>
+
+                {priceRange && (
+                  <div className="flex items-center gap-3 bg-stone-900/90 border border-stone-800 p-1.5 px-2.5 rounded-xl font-mono text-xs">
+                    <div className="flex flex-col text-right">
+                      <span className="text-[9px] uppercase font-bold text-stone-400">Rango Menudeo</span>
+                      <span className="text-xs font-bold text-emerald-400">Bs {priceRange.minRetail.toFixed(0)} — Bs {priceRange.maxRetail.toFixed(0)}</span>
+                    </div>
+                    <div className="h-4 w-px bg-stone-800" />
+                    <div className="flex flex-col text-right">
+                      <span className="text-[9px] uppercase font-bold text-stone-400">Rango Mayorista</span>
+                      <span className="text-xs font-bold text-blue-400">Bs {priceRange.minWholesale.toFixed(0)} — Bs {priceRange.maxWholesale.toFixed(0)}</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="flex-1 overflow-y-auto">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead className="sticky top-0 z-20 bg-stone-950/95 backdrop-blur-md text-stone-400 font-mono text-[11px] uppercase tracking-wider border-b border-stone-800 shadow-sm">
+                    <tr>
+                      <th className="py-2.5 px-4">Tela / Calidad</th>
+                      <th className="py-2.5 px-3 w-28 text-right">Costo Tela</th>
+                      <th className="py-2.5 px-3 w-28 text-right">Costo Piso</th>
+                      <th className="py-2.5 px-3 w-36 text-center">
+                        {currentMode === "wholesale" ? "Precio Mayorista" : currentMode === "retail" ? "Precio Minorista" : "Minorista / Mayorista"}
+                      </th>
+                      <th className="py-2.5 px-3 w-24 text-right">Margen</th>
+                    </tr>
+                  </thead>
+
+                  <tbody className="divide-y divide-stone-800/60 font-mono">
+                    {fabricLadder.map(({ fabric, cell, fabricCost }, index) => {
+                      const isLowest = index === 0;
+                      const isHighest = index === fabricLadder.length - 1;
+                      const marginVal = currentMode === "wholesale" ? cell.wholesaleMargin || 0 : cell.retailMargin || 0;
+
+                      return (
+                        <tr key={fabric.id} className="hover:bg-stone-800/30 transition-colors group">
+                          <td className="py-2.5 px-4">
+                            <div className="flex items-center gap-2">
+                              <span className="font-sans font-bold text-sm text-stone-100 group-hover:text-orange-400 transition-colors">{fabric.name}</span>
+                              {isLowest && <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 uppercase">Económico</span>}
+                              {isHighest && <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-purple-500/10 text-purple-400 border border-purple-500/20 uppercase">Premium</span>}
+                            </div>
+                            <div className="text-[11px] text-stone-400 mt-0.5">
+                              Bs {fabric.pricePerUnit.toFixed(2)}/m
+                              {Boolean(fabric.wastagePercentage) && <span className="text-stone-500 ml-1">(+{fabric.wastagePercentage}% merma)</span>}
+                            </div>
+                          </td>
+
+                          <td className="py-2.5 px-3 text-right text-stone-300">Bs {fabricCost.toFixed(2)}</td>
+                          <td className="py-2.5 px-3 text-right text-stone-400">Bs {(cell.costFloor || 0).toFixed(2)}</td>
+                          <td className="py-2.5 px-3 text-center">
+                            {currentMode === "retail" ? (
+                              <span className="text-sm font-bold text-emerald-400">Bs {(cell.retailPrice || 0).toFixed(0)}</span>
+                            ) : currentMode === "wholesale" ? (
+                              <span className="text-sm font-bold text-blue-400">Bs {(cell.wholesalePrice || 0).toFixed(0)}</span>
+                            ) : (
+                              <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-lg bg-stone-950 border border-stone-800">
+                                <span className="text-xs font-bold text-emerald-400">Bs {(cell.retailPrice || 0).toFixed(0)}</span>
+                                <span className="text-stone-600">/</span>
+                                <span className="text-xs font-bold text-blue-400">Bs {(cell.wholesalePrice || 0).toFixed(0)}</span>
+                              </div>
+                            )}
+                          </td>
+                          <td className="py-2.5 px-3 text-right">
+                            <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-bold ${marginVal >= 30 ? "text-emerald-400 bg-emerald-500/10" : "text-amber-400 bg-amber-500/10"}`}>
+                              {marginVal.toFixed(1)}%
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          ) : (
+            <div className="flex-1 flex flex-col items-center justify-center text-stone-500 text-sm font-mono">
+              Selecciona una prenda de la lista izquierda para cotizar.
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 };

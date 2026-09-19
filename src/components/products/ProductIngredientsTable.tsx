@@ -1,6 +1,59 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { Trash2 } from "lucide-react";
 import { GlobalConfig, Product, Material } from "../../types";
+
+interface IngredientQuantityInputProps {
+  value: number;
+  onChange: (val: number) => void;
+}
+
+function IngredientQuantityInput({ value, onChange }: IngredientQuantityInputProps) {
+  const [text, setText] = useState<string>(() =>
+    value !== undefined && value !== null ? String(value) : ""
+  );
+
+  useEffect(() => {
+    const currentNum = parseFloat(text);
+    if (isNaN(currentNum) ? value !== 0 : currentNum !== value) {
+      setText(value !== undefined && value !== null ? String(value) : "");
+    }
+  }, [value]);
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const raw = e.target.value;
+    setText(raw);
+    const parsed = parseFloat(raw);
+    if (!isNaN(parsed) && parsed >= 0) {
+      onChange(parsed);
+    } else if (raw === "") {
+      onChange(0);
+    }
+  };
+
+  const handleBlur = () => {
+    const parsed = parseFloat(text);
+    if (isNaN(parsed) || parsed < 0) {
+      setText("0");
+      onChange(0);
+    } else {
+      setText(String(parsed));
+      onChange(parsed);
+    }
+  };
+
+  return (
+    <input
+      type="number"
+      min="0"
+      step="any"
+      className="w-16 bg-stone-900 border border-stone-700 rounded px-1.5 py-1 text-white focus:border-amber-500 outline-none text-center font-mono text-xs"
+      value={text}
+      onChange={handleChange}
+      onBlur={handleBlur}
+      onWheel={(e) => e.currentTarget.blur()}
+    />
+  );
+}
 
 interface ProductIngredientsTableProps {
   draftProduct: Product;
@@ -72,16 +125,9 @@ export function ProductIngredientsTable({
                     {mat.name}
                   </td>
                   <td className="px-2 py-2 w-16 text-center">
-                    <input
-                      type="number"
-                      min="0"
-                      step="any"
-                      className="w-16 bg-stone-900 border border-stone-700 rounded px-1.5 py-1 text-white focus:border-amber-500 outline-none text-center font-mono text-xs"
-                      value={ing.quantity || ""}
-                      onChange={(e) =>
-                        onUpdateIngredient(mat.id, parseFloat(e.target.value) || 0)
-                      }
-                      onWheel={(e) => e.currentTarget.blur()}
+                    <IngredientQuantityInput
+                      value={ing.quantity}
+                      onChange={(q) => onUpdateIngredient(mat.id, q)}
                     />
                   </td>
                   <td className="px-2 py-2 w-12 text-center text-stone-500 font-mono text-[11px] truncate">

@@ -1,6 +1,85 @@
 # Changelog
 
-## [Unreleased] - 2026-09-17
+## [Unreleased] - 2026-09-19
+
+### Real-Time Price Override Inputs & Row Reset Optimization in Projected Prices
+- **What was added & optimized**:
+  - **Real-Time Input Handlers in `ProductProjectedPrices.tsx`**: Updated Menudeo (`customRetailPrice`) and Mayor (`customWholesalePrice`) `onChange` handlers to immediately parse numeric values and dispatch `onUpdateOverride(fabricId, updatedOverride)` on each keystroke without deferring to blur or keydown events.
+  - **Clean Override Pruning**: If an input is emptied or left blank, passes `undefined` for that price field; if both retail and wholesale prices are empty or cleared, automatically dispatches `onUpdateOverride(fabricId, null)` to cleanly prune the fabric key from `variantOverrides`.
+  - **Instant Row Reset (`RotateCcw`)**: Clicking the reset button immediately dispatches `onUpdateOverride(fabric.id, null)` (and `onResetOverride` if provided), instantly removing custom overrides, clearing the amber highlight, and returning the card to formula-based calculation.
+  - **Wheel Mutation Prevention**: Retained `onWheel={(e) => e.currentTarget.blur()}` on all numerical inputs to prevent accidental modifications during page scrolling.
+  - **Integration with `ProductsView`**: Connected `ProductProjectedPrices` to `handleUpdateOverride` in `ProductsView.tsx`, updating `draftProduct.variantOverrides` immutably and instantly flipping the `isDirty` state and enabling the pending changes action pill.
+- **Verification**:
+  - `src/components/products/ProductProjectedPrices.tsx`: 231 lines (Rule 500 compliant, < 500 lines limit).
+  - `src/components/views/ProductsView.tsx`: 492 lines (Rule 500 compliant, < 500 lines limit).
+  - Zero `any` or `@ts-ignore` used.
+  - Validated with `tsc --noEmit` and `compile_applet`.
+
+### Deep Comparison and Immediate Dirty State for Manual Price Overrides
+- **What was added & improved**:
+  - **Deep Equality for `variantOverrides`**: Enhanced `areProductsEqual` in `src/hooks/useProductDraft.ts` with deep comparison of manual pricing overrides across retail and wholesale values. Handles asymmetric states where one product contains overrides and the other does not, or where custom values differ numerically.
+  - **Clean Normalized Overrides**: Added `cleanOverrides` utility to filter out empty or cleared override keys, preventing ghost keys from generating false dirty states while ensuring cleared overrides properly reset.
+  - **Dedicated `updateVariantOverride`**: Added `updateVariantOverride(fabricId, override)` to `useProductDraft` ensuring immutable dictionary construction (`{ ...(prev.variantOverrides || {}), [fabricId]: override }`), automatic key pruning when both prices are cleared/undefined, and returning fresh references for both `draftProduct` and `variantOverrides`.
+  - **Direct Consumption in `ProductCard`**: Linked `ProductCard.tsx` directly to `updateVariantOverride`, ensuring price override modifications immediately flip `isDirty` to `true`.
+- **Verification**:
+  - `src/hooks/useProductDraft.ts`: 289 lines (Rule 300 compliant, < 300 lines limit).
+  - `src/components/products/ProductCard.tsx`: 429 lines (Rule 500 compliant, < 500 lines limit).
+  - Zero `any` or `@ts-ignore` used.
+  - Passed `tsc --noEmit` and production `compile_applet`.
+- **What was fixed & added**:
+  - **Bug 1 (Garment Duplication)**: Updated `handleCloneProduct` in `src/components/views/ProductsView.tsx` to deep-copy `ingredients` (`activeProduct.ingredients ? activeProduct.ingredients.map(i => ({ ...i })) : []`), preserve `variantOverrides` via deep clone, and preserve `allowedFabricIds` and all recipe properties so duplicates carry over all existing supplies and configuration settings.
+  - **Bug 2 (Decimal Input for Insumos Quantity)**: Introduced `IngredientQuantityInput` in `src/components/products/ProductIngredientsTable.tsx` with `step="any"` and `min="0"`. Added synchronized text-state handling so users can type fine decimal fractions (such as `0.05` or `0.02`) without losing leading zeros or stripping decimal points during input keystrokes.
+- **Verification**:
+  - `src/components/views/ProductsView.tsx`: 468 lines (< 500 lines limit).
+  - `src/components/products/ProductIngredientsTable.tsx`: 163 lines (< 500 lines limit).
+  - Validated with `tsc --noEmit` and `compile_applet`.
+- **What was updated**:
+  - Replaced negative margin positioning with clean right-aligned controls (`flex items-center justify-end gap-2 pb-1`) in `src/components/views/PricingMatrixView.tsx` to ensure zero clipping on all screen sizes with no duplicate title.
+  - Restored `src/components/pricing/PricingMatrixTable.tsx` exporting `PricingMatrixTable`, and added an explanatory banner note at the top of the file directing toolbar edits to `PricingMatrixView.tsx`.
+- **Verification**:
+  - `src/components/pricing/PricingMatrixTable.tsx`: 381 lines (< 500 lines limit).
+  - `src/components/views/PricingMatrixView.tsx`: 187 lines (< 500 lines limit).
+  - Validated with `tsc --noEmit` and `compile_applet`.
+- **What happened**:
+  - The updated breadcrumb row alignment (`-mt-14` header pull-up) was intended for `src/components/views/PricingMatrixView.tsx`, but was applied to `src/components/pricing/PricingMatrixTable.tsx`, overwriting the table component and causing `Uncaught SyntaxError: The requested module '/src/components/pricing/PricingMatrixTable.tsx' does not provide an export named 'PricingMatrixTable'`.
+- **Resolution**:
+  - Reinstated the full `PricingMatrixTable` component in `src/components/pricing/PricingMatrixTable.tsx`.
+  - Applied the header pull-up controls and breadcrumb toolbar layout into `src/components/views/PricingMatrixView.tsx`.
+- **Verification**:
+  - `src/components/pricing/PricingMatrixTable.tsx`: 375 lines (< 500 lines limit).
+  - `src/components/views/PricingMatrixView.tsx`: 188 lines (< 500 lines limit).
+  - Passed `tsc --noEmit` and `compile_applet`.
+- **What failed & Root Cause**:
+  - `PricingMatrixView` code was accidentally saved into `src/components/pricing/PricingMatrixTable.tsx`, overwriting the `PricingMatrixTable` component and creating a circular self-import that resulted in `Uncaught SyntaxError: The requested module '/src/components/pricing/PricingMatrixTable.tsx' does not provide an export named 'PricingMatrixTable'`.
+- **Resolution**:
+  - Restored `PricingMatrixTable` in `src/components/pricing/PricingMatrixTable.tsx` with the complete Master Garment Selector, Ranked Fabric Pricing Ladder, and safe numeric handling.
+  - Placed the new sleek single-row toolbar and collapsible dynamic pricing formulas banner into its intended container `src/components/views/PricingMatrixView.tsx`.
+- **Verification**:
+  - `PricingMatrixTable.tsx` is at 375 lines (< 500 lines limit).
+  - `PricingMatrixView.tsx` is at 197 lines (< 500 lines limit).
+  - Tested with `tsc --noEmit` and verified compilation with `compile_applet`.
+
+### Fix TypeError in Pricing Fabric Ladder Table (`PricingMatrixTable.tsx`)
+- **What failed & Root Cause**:
+  - Runtime crash `Uncaught TypeError: Cannot read properties of undefined (reading 'toFixed')` occurred when rendering fabric ladder rows.
+  - The component referenced non-existent properties on `MatrixCellResult`: `cell.totalCost` (actual property is `cell.costFloor`) and `cell.realRetailMargin` (actual property is `cell.retailMargin` or `cell.wholesaleMargin`).
+- **Resolution**:
+  - Replaced `cell.totalCost` with `cell.costFloor`.
+  - Replaced `cell.realRetailMargin` with `mode === 'wholesale' ? cell.wholesaleMargin : cell.retailMargin`.
+  - Added null-coalescing guards `(val ?? 0).toFixed(...)` across all numerical formatted fields and `priceRange` calculation.
+- **Verification**:
+  - `src/components/pricing/PricingMatrixTable.tsx` is at 374 lines (well below the 500-line ceiling).
+  - Validated with `lint_applet` (`tsc --noEmit`) and full `compile_applet` build.
+
+
+### 1-Click Axis Inverter & Thesis Mode Default (`PricingMatrixTable.tsx`)
+- **What was changed**:
+  - *Thesis View Mode Default*: Configured `isTransposed = true` by default to display fabrics in rows and garments in columns, aligning with the thesis standard.
+  - *Axis Inversion Toggle*: Added a 1-click axis inverter button (`Invertir Ejes (Prendas ⇄ Telas)`) with `ArrowLeftRight` icon, allowing seamless instant toggling between "Vista Tesis (Telas en filas · Prendas en columnas)" and "Vista Clásica (Prendas en filas · Telas en columnas)".
+  - *Sticky Column & Header Pinning*: Preserved sticky top and left corner positioning, dual-axis scrolling (`max-h-[75vh]`), and inline fabric quantity adjustment in column headers.
+- **Verification**:
+  - `src/components/pricing/PricingMatrixTable.tsx` maintained at 337 lines (strictly adheres to Rule 500 < 500 lines limit).
+  - Verified with `tsc --noEmit` and `compile_applet`.
 
 ### Two-Column Layout Wrap for Garment Controls & Insumos Table (`ProductsView.tsx`)
 - **What was changed**:

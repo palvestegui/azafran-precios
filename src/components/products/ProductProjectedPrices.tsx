@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React from "react";
 import { RotateCcw } from "lucide-react";
 import { GlobalConfig, Product, VariantPriceOverride } from "../../types";
 import { calculateMatrixCell } from "../../utils/pricingMatrix";
@@ -10,8 +10,7 @@ interface ProductProjectedPricesProps {
   isDirty: boolean;
   onUpdateOverride?: (
     fabricId: string,
-    field: "customRetailPrice" | "customWholesalePrice",
-    val: number | undefined
+    override: VariantPriceOverride | null
   ) => void;
   onResetOverride?: (fabricId: string) => void;
   onUpdateDraftProduct?: <K extends keyof Product>(
@@ -28,87 +27,70 @@ export function ProductProjectedPrices({
   onResetOverride,
   onUpdateDraftProduct,
 }: ProductProjectedPricesProps) {
-  const [, setTick] = useState(0);
-
-  // Helper to trigger parent dirty detection when running in unassisted mode
-  const notifyParentChanges = () => {
-    setTick((t) => t + 1);
-    const textInput = document.querySelector(
-      'input[type="text"]'
-    ) as HTMLInputElement | null;
-    if (textInput) {
-      const nativeSetter = Object.getOwnPropertyDescriptor(
-        window.HTMLInputElement.prototype,
-        "value"
-      )?.set;
-      nativeSetter?.call(textInput, textInput.value);
-      textInput.dispatchEvent(new Event("input", { bubbles: true }));
-    }
-  };
-
   const handlePriceChange = (
     fabricId: string,
     field: "customRetailPrice" | "customWholesalePrice",
     valString: string
   ) => {
     const trimmed = valString.trim();
-    const valNum = trimmed === "" ? undefined : parseInt(trimmed, 10);
+    const parsed = trimmed === "" ? undefined : parseFloat(trimmed);
+    const valNum =
+      parsed !== undefined && !isNaN(parsed) && parsed >= 0 ? parsed : undefined;
+
+    const currentOverride = draftProduct.variantOverrides?.[fabricId];
+    const updatedOverride: VariantPriceOverride = {
+      ...(currentOverride || {}),
+    };
+
+    if (valNum === undefined) {
+      delete updatedOverride[field];
+    } else {
+      updatedOverride[field] = valNum;
+    }
+
+    const isBothEmpty =
+      updatedOverride.customRetailPrice === undefined &&
+      updatedOverride.customWholesalePrice === undefined;
+
+    const finalOverride = isBothEmpty ? null : updatedOverride;
 
     if (onUpdateOverride) {
-      onUpdateOverride(fabricId, field, valNum);
+      onUpdateOverride(fabricId, finalOverride);
       return;
     }
 
-    if (!draftProduct.variantOverrides) {
-      draftProduct.variantOverrides = {};
-    }
-
-    const currentFabricOverride: VariantPriceOverride = {
-      ...(draftProduct.variantOverrides[fabricId] || {}),
-    };
-
-    if (valNum === undefined || isNaN(valNum) || valNum <= 0) {
-      delete currentFabricOverride[field];
-    } else {
-      currentFabricOverride[field] = valNum;
-    }
-
-    if (
-      currentFabricOverride.customRetailPrice === undefined &&
-      currentFabricOverride.customWholesalePrice === undefined
-    ) {
-      delete draftProduct.variantOverrides[fabricId];
-      if (Object.keys(draftProduct.variantOverrides).length === 0) {
-        delete draftProduct.variantOverrides;
-      }
-    } else {
-      draftProduct.variantOverrides[fabricId] = currentFabricOverride;
-    }
-
     if (onUpdateDraftProduct) {
-      onUpdateDraftProduct("variantOverrides", draftProduct.variantOverrides);
-    } else {
-      notifyParentChanges();
+      const nextOverrides: Record<string, VariantPriceOverride> = {
+        ...(draftProduct.variantOverrides || {}),
+      };
+      if (!finalOverride) {
+        delete nextOverrides[fabricId];
+      } else {
+        nextOverrides[fabricId] = finalOverride;
+      }
+      onUpdateDraftProduct(
+        "variantOverrides",
+        Object.keys(nextOverrides).length > 0 ? nextOverrides : undefined
+      );
     }
   };
 
   const handleReset = (fabricId: string) => {
+    if (onUpdateOverride) {
+      onUpdateOverride(fabricId, null);
+    }
     if (onResetOverride) {
       onResetOverride(fabricId);
-      return;
     }
-
-    if (draftProduct.variantOverrides) {
-      delete draftProduct.variantOverrides[fabricId];
-      if (Object.keys(draftProduct.variantOverrides).length === 0) {
-        delete draftProduct.variantOverrides;
-      }
-    }
-
-    if (onUpdateDraftProduct) {
-      onUpdateDraftProduct("variantOverrides", draftProduct.variantOverrides);
-    } else {
-      notifyParentChanges();
+    if (!onUpdateOverride && !onResetOverride && onUpdateDraftProduct) {
+      const nextOverrides: Record<string, VariantPriceOverride> = {
+        ...(draftProduct.variantOverrides || {}),
+      };
+      delete nextOverrides[fabricId];
+      onUpdateDraftProduct(
+        "variantOverrides",
+        Object.keys(nextOverrides).length > 0 ? nextOverrides : undefined
+      );
     }
   };
 

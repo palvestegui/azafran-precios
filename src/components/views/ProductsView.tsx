@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from "react";
 import { Plus, Trash2, Copy } from "lucide-react";
-import { GlobalConfig, Product } from "../../types";
+import { GlobalConfig, Product, VariantPriceOverride } from "../../types";
 import { cn } from "../../lib/utils";
 import { NavigationShieldModal } from "../products/NavigationShieldModal";
 import { DeleteProductModal } from "../products/DeleteProductModal";
@@ -133,10 +133,14 @@ export function ProductsView({ config, onChange, onNotify }: ProductsViewProps) 
       allowedFabricIds: activeProduct.allowedFabricIds
         ? [...activeProduct.allowedFabricIds]
         : [],
-      ingredients: (activeProduct.ingredients || []).map((s) => ({ ...s })),
+      ingredients: activeProduct.ingredients
+        ? activeProduct.ingredients.map((i) => ({ ...i }))
+        : [],
       profitMargin: activeProduct.profitMargin,
       wholesaleMargin: activeProduct.wholesaleMargin,
-      variantOverrides: {},
+      variantOverrides: activeProduct.variantOverrides
+        ? JSON.parse(JSON.stringify(activeProduct.variantOverrides))
+        : {},
     };
 
     const activeIdx = config.products.findIndex((p) => p.id === activeProduct.id);
@@ -232,6 +236,29 @@ export function ProductsView({ config, onChange, onNotify }: ProductsViewProps) 
       "ingredients",
       draftProduct.ingredients.filter((i) => i.materialId !== matId)
     );
+  };
+
+  const handleUpdateOverride = (
+    fabricId: string,
+    override: VariantPriceOverride | null
+  ) => {
+    setDraftProduct((prev) => {
+      if (!prev) return null;
+      const current = prev.variantOverrides ? { ...prev.variantOverrides } : {};
+      if (
+        !override ||
+        (override.customRetailPrice === undefined &&
+          override.customWholesalePrice === undefined)
+      ) {
+        delete current[fabricId];
+      } else {
+        current[fabricId] = override;
+      }
+      return {
+        ...prev,
+        variantOverrides: Object.keys(current).length > 0 ? current : undefined,
+      };
+    });
   };
 
   return (
@@ -391,6 +418,7 @@ export function ProductsView({ config, onChange, onNotify }: ProductsViewProps) 
                   draftProduct={draftProduct}
                   config={config}
                   isDirty={isDirty}
+                  onUpdateOverride={handleUpdateOverride}
                 />
               </div>
 
