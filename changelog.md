@@ -2,18 +2,29 @@
 
 ## [Unreleased] - 2026-09-19
 
-### Real-Time Price Override Inputs & Row Reset Optimization in Projected Prices
+### Garment List Alphabetization & Real-Time Search (`ProductsView.tsx`)
 - **What was added & optimized**:
-  - **Real-Time Input Handlers in `ProductProjectedPrices.tsx`**: Updated Menudeo (`customRetailPrice`) and Mayor (`customWholesalePrice`) `onChange` handlers to immediately parse numeric values and dispatch `onUpdateOverride(fabricId, updatedOverride)` on each keystroke without deferring to blur or keydown events.
-  - **Clean Override Pruning**: If an input is emptied or left blank, passes `undefined` for that price field; if both retail and wholesale prices are empty or cleared, automatically dispatches `onUpdateOverride(fabricId, null)` to cleanly prune the fabric key from `variantOverrides`.
-  - **Instant Row Reset (`RotateCcw`)**: Clicking the reset button immediately dispatches `onUpdateOverride(fabric.id, null)` (and `onResetOverride` if provided), instantly removing custom overrides, clearing the amber highlight, and returning the card to formula-based calculation.
-  - **Wheel Mutation Prevention**: Retained `onWheel={(e) => e.currentTarget.blur()}` on all numerical inputs to prevent accidental modifications during page scrolling.
-  - **Integration with `ProductsView`**: Connected `ProductProjectedPrices` to `handleUpdateOverride` in `ProductsView.tsx`, updating `draftProduct.variantOverrides` immutably and instantly flipping the `isDirty` state and enabling the pending changes action pill.
+  - **Alphabetical Sorting (A to Z)**: Implemented memoized alphabetical sorting for the garments catalog in the left navigation rail using `localeCompare` with Spanish locale (`"es"`) and base sensitivity (`{ sensitivity: "base" }`), correctly handling Spanish collation rules and accents.
+  - **Real-Time Search Input**: Added a compact, focused search bar directly above the garment list in the left rail with a `Search` icon (`lucide-react`), placeholder `"Buscar prenda..."`, and a quick-clear (`X`) button that appears whenever text is present in `searchTerm`.
+  - **Live Filtered List Rendering**: Filtered garments dynamically in real-time as users type. Added a sleek fallback message (`"No se encontraron prendas"`) when no products match the query.
+  - **Selection & Dirty-State Preservation**: Seamlessly preserved existing garment selection, dirty-state indicators, and recipe workbench interactions across filtered and sorted listings.
 - **Verification**:
-  - `src/components/products/ProductProjectedPrices.tsx`: 231 lines (Rule 500 compliant, < 500 lines limit).
-  - `src/components/views/ProductsView.tsx`: 492 lines (Rule 500 compliant, < 500 lines limit).
-  - Zero `any` or `@ts-ignore` used.
-  - Validated with `tsc --noEmit` and `compile_applet`.
+  - `src/components/views/ProductsView.tsx`: 465 lines (strictly compliant with Rule 500 < 500 lines limit).
+  - Strict TypeScript: 0 `any`, 0 `@ts-ignore`.
+  - Validated clean compilation with `tsc --noEmit` (`lint_applet`) and production `compile_applet`.
+
+### Garment-Level Profit Margin Controls & Workbench Header Optimization
+- **What was added & optimized**:
+  - **Garment-Level Profit Margins (`Margen Menudeo (%)` & `Margen Mayor (%)`)**: Added compact numeric input fields to the active garment configuration workbench header, binding to `draftProduct.profitMargin` and `draftProduct.wholesaleMargin` with dynamic placeholders reflecting system defaults (`config.profitMargin || 35` and `config.wholesaleMargin || 20`).
+  - **Instant Recalculation**: Changes immediately invoke `updateDraft({ profitMargin: valNum, wholesaleMargin: valNum })`, triggering `isDirty` and automatically updating the projected prices grid across all fabric cards through `calculateProductAnalysis`.
+  - **Graceful Global Fallback**: Clearing either input resets the value to `undefined` and removes the key from the draft object, cleanly reverting that garment's margin to the global system default without ghost values.
+  - **Scroll Mutation Prevention**: Configured `onWheel={(e) => e.currentTarget.blur()}` on all margin inputs.
+  - **Architectural Extraction (`ProductWorkbenchHeader.tsx`)**: Extracted garment workbench controls (name, effort multiplier, primary fabric, allowed fabrics dropdown, meters per unit, margins, and actions) into a dedicated component to maintain strict modularity.
+- **Verification**:
+  - `src/components/views/ProductsView.tsx`: 421 lines (Rule 500 compliant, < 500 lines limit).
+  - `src/components/products/ProductWorkbenchHeader.tsx`: 171 lines (Rule 500 compliant, < 500 lines limit).
+  - Strict TypeScript: 0 `any`, 0 `@ts-ignore`.
+  - Validated with `tsc --noEmit` and production `compile_applet`.
 
 ### Deep Comparison and Immediate Dirty State for Manual Price Overrides
 - **What was added & improved**:

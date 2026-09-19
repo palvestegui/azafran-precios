@@ -1,12 +1,12 @@
 import React, { useState, useMemo, useEffect } from "react";
-import { Plus, Trash2, Copy } from "lucide-react";
+import { Plus, Search, X } from "lucide-react";
 import { GlobalConfig, Product, VariantPriceOverride } from "../../types";
 import { cn } from "../../lib/utils";
 import { NavigationShieldModal } from "../products/NavigationShieldModal";
 import { DeleteProductModal } from "../products/DeleteProductModal";
 import { ProductIngredientsTable } from "../products/ProductIngredientsTable";
 import { ProductProjectedPrices } from "../products/ProductProjectedPrices";
-import { AllowedFabricsDropdown } from "../products/AllowedFabricsDropdown";
+import { ProductWorkbenchHeader } from "../products/ProductWorkbenchHeader";
 
 interface ProductsViewProps {
   config: GlobalConfig;
@@ -32,6 +32,19 @@ export function ProductsView({ config, onChange, onNotify }: ProductsViewProps) 
   const [pendingProductId, setPendingProductId] = useState<string | null>(null);
   const [pendingCloneId, setPendingCloneId] = useState<string | null>(null);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [searchTerm, setSearchTerm] = useState("");
+
+  const sortedAndFilteredProducts = useMemo(() => {
+    const term = searchTerm.trim().toLowerCase();
+    return [...config.products]
+      .sort((a, b) =>
+        (a.name || "").localeCompare(b.name || "", "es", { sensitivity: "base" })
+      )
+      .filter((p) => {
+        if (!term) return true;
+        return (p.name || "").toLowerCase().includes(term);
+      });
+  }, [config.products, searchTerm]);
 
   // Sync draft whenever selectedProductId changes
   useEffect(() => {
@@ -178,8 +191,18 @@ export function ProductsView({ config, onChange, onNotify }: ProductsViewProps) 
     onNotify?.("Prenda eliminada", "info");
   };
 
+  const updateDraft = (updates: Partial<Product>) => {
+    setDraftProduct((prev) => {
+      if (!prev) return null;
+      const next: Product = { ...prev, ...updates };
+      if (next.profitMargin === undefined) delete next.profitMargin;
+      if (next.wholesaleMargin === undefined) delete next.wholesaleMargin;
+      return next;
+    });
+  };
+
   const updateDraftProduct = <K extends keyof Product>(field: K, value: Product[K]) => {
-    setDraftProduct((prev) => (prev ? { ...prev, [field]: value } : null));
+    updateDraft({ [field]: value });
   };
 
   const handleSave = () => {
@@ -265,8 +288,37 @@ export function ProductsView({ config, onChange, onNotify }: ProductsViewProps) 
     <div className="w-full p-2 pt-0 mt-0 flex flex-1 h-[calc(100vh-65px)] min-h-0 overflow-hidden">
       {/* Left Garment Selector Column */}
       <div className="w-80 h-full flex flex-col pr-3 border-r border-stone-800/50 shrink-0">
+        {/* Real-Time Garment Search */}
+        <div className="relative mb-2 shrink-0">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-stone-500 pointer-events-none" />
+          <input
+            id="garment-search-input"
+            type="text"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            placeholder="Buscar prenda..."
+            className="w-full bg-stone-900 border border-stone-800 rounded-lg pl-8 pr-7 py-1.5 text-xs text-stone-200 placeholder:text-stone-500 focus:outline-none focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/30 transition-colors"
+          />
+          {searchTerm && (
+            <button
+              id="clear-garment-search-btn"
+              type="button"
+              onClick={() => setSearchTerm("")}
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-stone-500 hover:text-stone-300 p-0.5 rounded cursor-pointer transition-colors"
+              title="Limpiar búsqueda"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          )}
+        </div>
+
         <div className="flex flex-col gap-1 flex-1 overflow-y-auto min-h-0">
-            {config.products.map((p) => {
+          {sortedAndFilteredProducts.length === 0 ? (
+            <div className="text-center py-8 px-2 text-xs text-stone-500 italic">
+              No se encontraron prendas
+            </div>
+          ) : (
+            sortedAndFilteredProducts.map((p) => {
               const isSelected = p.id === selectedProductId;
               const fabricCount = p.allowedFabricIds?.length || 0;
               return (
@@ -299,105 +351,25 @@ export function ProductsView({ config, onChange, onNotify }: ProductsViewProps) 
                   </div>
                 </button>
               );
-            })}
-          </div>
+            })
+          )}
         </div>
+      </div>
 
         {/* Right Configuration Canvas */}
         {draftProduct ? (
           <div className="flex-1 w-full h-full flex flex-col pl-4 overflow-y-auto relative">
             {/* Two-Column Grid: Garment Configuration & Insumos */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 pb-3 mb-3 border-b border-stone-800/40">
-              {/* Column 1: Garment input controls */}
-              <div className="flex flex-wrap items-end gap-4">
-                <div className="flex-1 min-w-[200px]">
-                  <label className="text-[10px] uppercase font-bold text-stone-500 tracking-wider mb-1 block">
-                    Nombre de Prenda
-                  </label>
-                  <input
-                    type="text"
-                    className="w-full bg-stone-950 border border-stone-800 rounded-lg px-3 py-2 text-white focus:border-amber-500 outline-none text-sm font-bold"
-                    value={draftProduct.name}
-                    onChange={(e) => updateDraftProduct("name", e.target.value)}
-                  />
-                </div>
-                <div className="w-32">
-                  <label className="text-[10px] uppercase font-bold text-stone-500 tracking-wider mb-1 block">
-                    Esfuerzo (x)
-                  </label>
-                  <input
-                    type="number"
-                    step="0.05"
-                    min="0.1"
-                    className="w-full bg-stone-950 border border-stone-800 rounded-lg px-3 py-2 text-white focus:border-amber-500 outline-none text-sm font-mono text-center"
-                    value={draftProduct.productionWeight ?? 1}
-                    onChange={(e) =>
-                      updateDraftProduct("productionWeight", parseFloat(e.target.value) || 0)
-                    }
-                    onWheel={(e) => e.currentTarget.blur()}
-                  />
-                </div>
-                <div className="w-48">
-                  <label className="text-[10px] uppercase font-bold text-stone-500 tracking-wider mb-1 block">
-                    Tela Principal
-                  </label>
-                  <select
-                    className="w-full bg-stone-950 border border-stone-800 rounded-lg px-3 py-2 text-white focus:border-amber-500 outline-none text-sm"
-                    value={draftProduct.defaultFabricId || ""}
-                    onChange={(e) => updateDraftProduct("defaultFabricId", e.target.value)}
-                  >
-                    <option value="">Seleccionar...</option>
-                    {fabrics.map((f) => (
-                      <option key={f.id} value={f.id}>
-                        {f.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div className="relative">
-                  <AllowedFabricsDropdown
-                    allowedFabrics={draftProduct.allowedFabricIds || []}
-                    allFabrics={fabrics}
-                    baseFabric={draftProduct.defaultFabricId || ""}
-                    onChange={(newAllowed) => updateDraftProduct("allowedFabricIds", newAllowed)}
-                  />
-                </div>
-                <div className="w-32">
-                  <label className="text-[10px] uppercase font-bold text-stone-500 tracking-wider mb-1 block">
-                    Metros/Unidad
-                  </label>
-                  <input
-                    type="number"
-                    step="0.05"
-                    min="0"
-                    className="w-full bg-stone-950 border border-stone-800 rounded-lg px-3 py-2 text-white focus:border-amber-500 outline-none text-sm font-mono text-center"
-                    value={draftProduct.fabricQuantity ?? 0}
-                    onChange={(e) =>
-                      updateDraftProduct("fabricQuantity", parseFloat(e.target.value) || 0)
-                    }
-                    onWheel={(e) => e.currentTarget.blur()}
-                  />
-                </div>
-                <div className="flex items-center gap-2 self-end">
-                  <button
-                    type="button"
-                    onClick={handleCloneProduct}
-                    className="text-amber-400 bg-amber-500/10 border border-amber-500/30 hover:bg-amber-500/20 text-xs font-black uppercase px-3 py-1.5 rounded-xl flex items-center gap-1.5 cursor-pointer h-10 transition-colors"
-                    title="Duplicar prenda"
-                  >
-                    <Copy className="w-3.5 h-3.5" />
-                    <span>Duplicar Prenda</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setIsDeleteModalOpen(true)}
-                    className="p-2.5 text-stone-500 hover:text-red-400 hover:bg-red-400/10 rounded-xl transition-colors border border-transparent hover:border-red-400/20 h-10 flex items-center justify-center cursor-pointer"
-                    title="Eliminar prenda"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </div>
-              </div>
+              {/* Column 1: Garment input controls & margins */}
+              <ProductWorkbenchHeader
+                draftProduct={draftProduct}
+                config={config}
+                fabrics={fabrics}
+                updateDraft={updateDraft}
+                onCloneProduct={handleCloneProduct}
+                onDeleteProduct={() => setIsDeleteModalOpen(true)}
+              />
 
               {/* Column 2: Insumos & Costos Fijos */}
               <div className="w-full">
