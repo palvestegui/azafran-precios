@@ -9,10 +9,12 @@ import { getFirestore } from "firebase-admin/firestore";
 import { calculateProductAnalysis } from "./src/utils/pricingCalculator.js";
 import { roundBob } from "./src/utils/calculations.js";
 import { GlobalConfig } from "./src/types.js";
+import { DEFAULT_GLOBAL_CONFIG } from "./src/data/defaultCatalog.js";
+import firebaseConfig from "./firebase-applet-config.json";
 
 // Initialize Firebase Apps
 const localApp = admin.initializeApp();
-const dbLocal = getFirestore(localApp);
+const dbLocal = getFirestore(localApp, firebaseConfig.firestoreDatabaseId || "(default)");
 
 let dbVentas: FirebaseFirestore.Firestore;
 try {
@@ -29,11 +31,16 @@ const mcpServer = new McpServer({
 
 // Helper to get local config
 async function getLocalConfig(): Promise<GlobalConfig> {
-  const doc = await dbLocal.collection("config").doc("system-wide-config").get();
-  if (!doc.exists) {
-    throw new Error("Local config not found");
+  try {
+    const doc = await dbLocal.collection("config").doc("system-wide-config").get();
+    if (!doc.exists) {
+      return DEFAULT_GLOBAL_CONFIG;
+    }
+    return (doc.data() as GlobalConfig) || DEFAULT_GLOBAL_CONFIG;
+  } catch (error) {
+    console.error("Failed to retrieve local config from Firestore, falling back to default:", error);
+    return DEFAULT_GLOBAL_CONFIG;
   }
-  return doc.data() as GlobalConfig;
 }
 
 // 1. precios_get_matrix

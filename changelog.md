@@ -1,5 +1,17 @@
 # Changelog
 
+## [Unreleased] - 2026-09-21
+
+### Named Firestore Database Binding & Catalog Fallback (`server.ts`)
+- **What was fixed & optimized**:
+  - **Named Firestore Database Binding**: Updated `server.ts` to import `firebaseConfig` directly from `./firebase-applet-config.json` and initialize `dbLocal` with `getFirestore(localApp, firebaseConfig.firestoreDatabaseId || "(default)")`, ensuring the server and MCP tools interact with the applet's dedicated named Firestore database (`ai-studio-fa1e6918-be9a-4562-bfc7-e531579774e7`) rather than the fallback `(default)` instance.
+  - **Resilient Fallback in `getLocalConfig`**: Enhanced `getLocalConfig()` with a defensive guard and `try/catch` block. If `system-wide-config` does not exist in the database or an exception occurs during reading, it cleanly returns `DEFAULT_GLOBAL_CONFIG` from `./src/data/defaultCatalog.js`, preventing uncaught exceptions and ensuring server uptime.
+  - **Tool Preservation**: Preserved all existing MCP tools and endpoints untouched.
+- **Verification**:
+  - Strict TypeScript validation with `tsc --noEmit` passed with 0 errors.
+  - Production build verified via `compile_applet`.
+  - Dev server restarted and running smoothly.
+
 ## [Unreleased] - 2026-09-19
 
 ### Garment List Alphabetization & Real-Time Search (`ProductsView.tsx`)
