@@ -10,7 +10,7 @@ import { ProductWorkbenchHeader } from "../products/ProductWorkbenchHeader";
 
 interface ProductsViewProps {
   config: GlobalConfig;
-  onChange: (c: GlobalConfig) => void;
+  onChange: (c: GlobalConfig) => Promise<void> | void;
   onNotify?: (text: string, type: "success" | "error" | "info") => void;
 }
 
@@ -29,6 +29,11 @@ export function ProductsView({ config, onChange, onNotify }: ProductsViewProps) 
     return initial ? JSON.parse(JSON.stringify(initial)) : null;
   });
 
+  const [committedProduct, setCommittedProduct] = useState<Product | null>(() => {
+    const initial = config.products.length > 0 ? config.products[0] : null;
+    return initial ? JSON.parse(JSON.stringify(initial)) : null;
+  });
+
   const [pendingProductId, setPendingProductId] = useState<string | null>(null);
   const [pendingCloneId, setPendingCloneId] = useState<string | null>(null);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
@@ -37,24 +42,25 @@ export function ProductsView({ config, onChange, onNotify }: ProductsViewProps) 
   const sortedAndFilteredProducts = useMemo(() => {
     const term = searchTerm.trim().toLowerCase();
     return [...config.products]
-      .sort((a, b) =>
-        (a.name || "").localeCompare(b.name || "", "es", { sensitivity: "base" })
-      )
-      .filter((p) => {
-        if (!term) return true;
-        return (p.name || "").toLowerCase().includes(term);
-      });
+      .sort((a, b) => (a.name || "").localeCompare(b.name || "", "es", { sensitivity: "base" }))
+      .filter((p) => !term || (p.name || "").toLowerCase().includes(term));
   }, [config.products, searchTerm]);
 
   // Sync draft whenever selectedProductId changes
   useEffect(() => {
     if (selectedProduct) {
-      setDraftProduct(JSON.parse(JSON.stringify(selectedProduct)));
+      const cloned = JSON.parse(JSON.stringify(selectedProduct));
+      setDraftProduct(cloned);
+      setCommittedProduct(cloned);
     } else if (config.products.length > 0) {
-      setSelectedProductId(config.products[0].id);
-      setDraftProduct(JSON.parse(JSON.stringify(config.products[0])));
+      const first = config.products[0];
+      setSelectedProductId(first.id);
+      const cloned = JSON.parse(JSON.stringify(first));
+      setDraftProduct(cloned);
+      setCommittedProduct(cloned);
     } else {
       setDraftProduct(null);
+      setCommittedProduct(null);
     }
   }, [selectedProductId]);
 
@@ -63,14 +69,16 @@ export function ProductsView({ config, onChange, onNotify }: ProductsViewProps) 
     if (selectedProductId && !config.products.some((p) => p.id === selectedProductId)) {
       const fallback = config.products.length > 0 ? config.products[0] : null;
       setSelectedProductId(fallback ? fallback.id : null);
-      setDraftProduct(fallback ? JSON.parse(JSON.stringify(fallback)) : null);
+      const cloned = fallback ? JSON.parse(JSON.stringify(fallback)) : null;
+      setDraftProduct(cloned);
+      setCommittedProduct(cloned);
     }
   }, [config.products, selectedProductId]);
 
   const isDirty = Boolean(
     (draftProduct &&
-      selectedProduct &&
-      JSON.stringify(draftProduct) !== JSON.stringify(selectedProduct)) ||
+      committedProduct &&
+      JSON.stringify(draftProduct) !== JSON.stringify(committedProduct)) ||
       (pendingCloneId && draftProduct?.id === pendingCloneId)
   );
 
@@ -89,7 +97,9 @@ export function ProductsView({ config, onChange, onNotify }: ProductsViewProps) 
     };
     onChange({ ...config, products: [newProduct, ...config.products] });
     setSelectedProductId(newProduct.id);
-    setDraftProduct(JSON.parse(JSON.stringify(newProduct)));
+    const cloned = JSON.parse(JSON.stringify(newProduct));
+    setDraftProduct(cloned);
+    setCommittedProduct(cloned);
     setPendingCloneId(null);
     onNotify?.("Nueva prenda creada", "success");
   };
@@ -110,7 +120,9 @@ export function ProductsView({ config, onChange, onNotify }: ProductsViewProps) 
     }
     setSelectedProductId(id);
     const target = config.products.find((p) => p.id === id);
-    setDraftProduct(target ? JSON.parse(JSON.stringify(target)) : null);
+    const cloned = target ? JSON.parse(JSON.stringify(target)) : null;
+    setDraftProduct(cloned);
+    setCommittedProduct(cloned);
   };
 
   const handleConfirmNavigation = () => {
@@ -124,7 +136,9 @@ export function ProductsView({ config, onChange, onNotify }: ProductsViewProps) 
     } else {
       setSelectedProductId(nextId);
       const target = config.products.find((p) => p.id === nextId);
-      setDraftProduct(target ? JSON.parse(JSON.stringify(target)) : null);
+      const cloned = target ? JSON.parse(JSON.stringify(target)) : null;
+      setDraftProduct(cloned);
+      setCommittedProduct(cloned);
     }
   };
 
@@ -140,6 +154,7 @@ export function ProductsView({ config, onChange, onNotify }: ProductsViewProps) 
     const clonedProduct: Product = {
       id: clonedId,
       name: `Copia de ${activeProduct.name || "Prenda"}`,
+      category: activeProduct.category,
       productionWeight: activeProduct.productionWeight ?? 1.0,
       fabricQuantity: activeProduct.fabricQuantity ?? 1,
       defaultFabricId: activeProduct.defaultFabricId,
@@ -186,7 +201,9 @@ export function ProductsView({ config, onChange, onNotify }: ProductsViewProps) 
     if (selectedProductId === id) {
       const nextProduct = newProducts.length > 0 ? newProducts[0] : null;
       setSelectedProductId(nextProduct ? nextProduct.id : null);
-      setDraftProduct(nextProduct ? JSON.parse(JSON.stringify(nextProduct)) : null);
+      const cloned = nextProduct ? JSON.parse(JSON.stringify(nextProduct)) : null;
+      setDraftProduct(cloned);
+      setCommittedProduct(cloned);
     }
     onNotify?.("Prenda eliminada", "info");
   };
@@ -205,82 +222,82 @@ export function ProductsView({ config, onChange, onNotify }: ProductsViewProps) 
     updateDraft({ [field]: value });
   };
 
-  const handleSave = () => {
-    if (!draftProduct || !selectedProduct) return;
+  const markCurrentProductClean = () => {
+    if (draftProduct) {
+      const cleanCopy = JSON.parse(JSON.stringify(draftProduct));
+      setCommittedProduct(cleanCopy);
+      setDraftProduct(cleanCopy);
+    }
+  };
+
+  const handleSave = async () => {
+    if (!draftProduct) return;
     setPendingCloneId(null);
-    const updatedProducts = config.products.map((p) =>
-      p.id === draftProduct.id ? draftProduct : p
-    );
-    onChange({
+
+    // 1. Commit active product draft if it has pending changes
+    let updatedProducts = [...config.products];
+    if (isDirty && draftProduct) {
+      const exists = updatedProducts.some((p) => p.id === draftProduct.id);
+      if (exists) {
+        updatedProducts = updatedProducts.map((p) =>
+          p.id === draftProduct.id ? draftProduct : p
+        );
+      } else {
+        updatedProducts = [draftProduct, ...updatedProducts];
+      }
+    }
+
+    // 2. Write to Firestore immediately in one run
+    const newConfig: GlobalConfig = {
       ...config,
       products: updatedProducts,
-    });
-    onNotify?.(`✓ Receta de ${draftProduct.name || "Prenda"} actualizada`, "success");
+    };
+
+    // 3. Mark draft clean so header immediately flips to '✓ Al día' on first click
+    markCurrentProductClean();
+
+    await onChange(newConfig);
+    onNotify?.(`✓ Receta de ${draftProduct.name || "Prenda"} guardada y al día`, "success");
   };
 
   const handleDiscard = () => {
-    if (!selectedProduct) return;
+    const base = committedProduct || selectedProduct;
+    if (!base) return;
     setPendingCloneId(null);
-    setDraftProduct(JSON.parse(JSON.stringify(selectedProduct)));
+    const clean = JSON.parse(JSON.stringify(base));
+    setDraftProduct(clean);
+    setCommittedProduct(clean);
     onNotify?.("Cambios descartados", "info");
   };
 
-  const fabrics = useMemo(
-    () => config.materials.filter((m) => m.category === "fabric"),
-    [config.materials]
-  );
-  const insumos = useMemo(
-    () => config.materials.filter((m) => m.category !== "fabric"),
-    [config.materials]
-  );
+  const fabrics = useMemo(() => config.materials.filter((m) => m.category === "fabric"), [config.materials]);
+  const insumos = useMemo(() => config.materials.filter((m) => m.category !== "fabric"), [config.materials]);
 
   const handleAddIngredient = (matId: string) => {
-    if (!draftProduct) return;
-    if (draftProduct.ingredients.some((i) => i.materialId === matId)) return;
-    updateDraftProduct("ingredients", [
-      ...draftProduct.ingredients,
-      { materialId: matId, quantity: 1 },
-    ]);
+    if (!draftProduct || draftProduct.ingredients.some((i) => i.materialId === matId)) return;
+    updateDraftProduct("ingredients", [...draftProduct.ingredients, { materialId: matId, quantity: 1 }]);
   };
 
   const handleUpdateIngredient = (matId: string, quantity: number) => {
     if (!draftProduct) return;
-    updateDraftProduct(
-      "ingredients",
-      draftProduct.ingredients.map((i) =>
-        i.materialId === matId ? { ...i, quantity } : i
-      )
-    );
+    updateDraftProduct("ingredients", draftProduct.ingredients.map((i) => (i.materialId === matId ? { ...i, quantity } : i)));
   };
 
   const handleRemoveIngredient = (matId: string) => {
     if (!draftProduct) return;
-    updateDraftProduct(
-      "ingredients",
-      draftProduct.ingredients.filter((i) => i.materialId !== matId)
-    );
+    updateDraftProduct("ingredients", draftProduct.ingredients.filter((i) => i.materialId !== matId));
   };
 
-  const handleUpdateOverride = (
-    fabricId: string,
-    override: VariantPriceOverride | null
-  ) => {
+  const handleUpdateOverride = (fabricId: string, override: VariantPriceOverride | null) => {
     setDraftProduct((prev) => {
       if (!prev) return null;
       const current = prev.variantOverrides ? { ...prev.variantOverrides } : {};
-      if (
-        !override ||
-        (override.customRetailPrice === undefined &&
-          override.customWholesalePrice === undefined)
-      ) {
+      if (!override || (override.customRetailPrice === undefined && override.customWholesalePrice === undefined)) {
         delete current[fabricId];
       } else {
         current[fabricId] = override;
       }
-      return {
-        ...prev,
-        variantOverrides: Object.keys(current).length > 0 ? current : undefined,
-      };
+      return { ...prev, variantOverrides: Object.keys(current).length > 0 ? current : undefined };
     });
   };
 
@@ -346,8 +363,15 @@ export function ProductsView({ config, onChange, onNotify }: ProductsViewProps) 
                       {fabricCount} telas • {p.fabricQuantity || 0}m
                     </div>
                   </div>
-                  <div className="shrink-0 bg-stone-900 px-2 py-1 rounded font-mono text-[10px] border border-stone-800">
-                    {(p.productionWeight || 1).toFixed(1)}x
+                  <div className="shrink-0 flex items-center gap-1.5">
+                    {p.category && (
+                      <span className="text-[9px] uppercase font-mono px-1.5 py-0.5 rounded bg-amber-500/10 border border-amber-500/20 text-amber-400 font-bold">
+                        {p.category}
+                      </span>
+                    )}
+                    <div className="bg-stone-900 px-2 py-1 rounded font-mono text-[10px] border border-stone-800">
+                      {(p.productionWeight || 1).toFixed(1)}x
+                    </div>
                   </div>
                 </button>
               );

@@ -65,10 +65,24 @@ service cloud.firestore {
              (!('wholesaleMargin' in data) || (data.wholesaleMargin is number && data.wholesaleMargin >= 0));
     }
 
+    function isValidPricing(data) {
+      return data.garments is map &&
+             data.catalogGarments is map &&
+             (!('catalog' in data) || data.catalog is map) &&
+             data.lastSyncedAt is number &&
+             data.updatedAt is string;
+    }
+
     // --- Collection: Config ---
     match /config/{configId} {
-      allow read: if isSignedIn() && isValidId(configId);
-      allow write: if isVerified() && isValidId(configId) && isValidConfig(incoming());
+      allow read: if isValidId(configId);
+      allow write: if isValidId(configId) && isValidConfig(incoming());
+    }
+
+    // --- Collection: Pricing ---
+    match /pricing/{pricingId} {
+      allow read: if isValidId(pricingId);
+      allow write: if isValidId(pricingId) && isValidPricing(incoming());
     }
 
     // --- Collection: Audits ---

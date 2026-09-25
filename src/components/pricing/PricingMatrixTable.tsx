@@ -17,6 +17,7 @@ import {
   Store,
   Info,
   CheckCircle2,
+  RefreshCw,
 } from "lucide-react";
 
 interface PricingMatrixTableProps {
@@ -41,6 +42,8 @@ export const PricingMatrixTable: React.FC<PricingMatrixTableProps> = ({
   const [currentMode, setCurrentMode] = useState<MatrixViewMode>(initialMode);
   const [showFormulas, setShowFormulas] = useState<boolean>(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [isSyncing, setIsSyncing] = useState<boolean>(false);
+  const [syncFeedback, setSyncFeedback] = useState<{ type: "success" | "error"; message: string } | null>(null);
 
   const fabricList = useMemo(() => fabrics.filter((m) => m.category === "fabric"), [fabrics]);
 
@@ -87,6 +90,57 @@ export const PricingMatrixTable: React.FC<PricingMatrixTableProps> = ({
       setToastMessage(`Matriz exportada como ${fn}`);
       setTimeout(() => setToastMessage(null), 3000);
     } catch { /* ignore */ }
+  };
+
+  const handleSyncToVentas = async () => {
+    setIsSyncing(true);
+    setSyncFeedback(null);
+    try {
+      const res = await fetch("/mcp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          id: Date.now(),
+          method: "tools/call",
+          params: {
+            name: "precios_sync_to_ventas",
+            arguments: {},
+          },
+        }),
+      });
+
+      const data = (await res.json()) as {
+        result?: { content?: Array<{ type: string; text?: string }> };
+        error?: { message?: string };
+      };
+
+      if (data.result && !data.error) {
+        const textContent = data.result.content?.[0]?.text;
+        let parsed: { success?: boolean; error?: string; message?: string } = {};
+        if (textContent) {
+          try {
+            parsed = JSON.parse(textContent) as { success?: boolean; error?: string; message?: string };
+          } catch {
+            /* ignore */
+          }
+        }
+
+        if (parsed.success === false) {
+          setSyncFeedback({ type: "error", message: parsed.error || "Error al sincronizar con Ventas." });
+        } else {
+          setSyncFeedback({ type: "success", message: "¡Catálogo y precios publicados exitosamente a Ventas!" });
+        }
+      } else {
+        setSyncFeedback({ type: "error", message: data.error?.message || "Error al conectar con el servidor." });
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setSyncFeedback({ type: "error", message: `Fallo de red: ${msg}` });
+    } finally {
+      setIsSyncing(false);
+      setTimeout(() => setSyncFeedback(null), 4500);
+    }
   };
 
   const saveMeters = () => {
@@ -150,8 +204,29 @@ export const PricingMatrixTable: React.FC<PricingMatrixTableProps> = ({
           <button type="button" onClick={() => handleExport("pdf")} title="Exportar PDF" className="p-1.5 rounded-xl bg-stone-900 border border-stone-800 text-stone-300 hover:text-orange-400 transition-all shadow-sm active:scale-95">
             <Printer className="w-4 h-4 text-orange-400" />
           </button>
+
+          <button
+            type="button"
+            onClick={handleSyncToVentas}
+            disabled={isSyncing}
+            title="Publicar catálogo y precios directamente a Ventas (Staging)"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 hover:bg-amber-500 hover:text-black transition-all text-xs font-mono font-bold shadow-sm active:scale-95 disabled:opacity-50 cursor-pointer"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? "animate-spin text-amber-400" : "text-amber-400"}`} />
+            <span>{isSyncing ? "Publicando..." : "Publicar a Ventas"}</span>
+          </button>
         </div>
       </div>
+
+      {syncFeedback && (
+        <div className={`fixed bottom-4 right-4 z-50 px-4 py-2.5 rounded-xl border text-xs font-mono font-bold shadow-2xl animate-in slide-in-from-bottom duration-200 ${
+          syncFeedback.type === "success"
+            ? "bg-emerald-950 border-emerald-500/50 text-emerald-200"
+            : "bg-red-950 border-red-500/50 text-red-200"
+        }`}>
+          {syncFeedback.message}
+        </div>
+      )}
 
       {toastMessage && (
         <div className="p-2 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs font-mono flex items-center gap-2 animate-in fade-in">
@@ -308,9 +383,8 @@ export const PricingMatrixTable: React.FC<PricingMatrixTableProps> = ({
                   </thead>
 
                   <tbody className="divide-y divide-stone-800/60 font-mono">
-                    {fabricLadder.map(({ fabric, cell, fabricCost }, index) => {
-                      const isLowest = index === 0;
-                      const isHighest = index === fabricLadder.length - 1;
+                    {fabricLadder.map(({ fabric, cell, fabricCost }) => {
+                      const isDefaultFabric = activeProduct?.defaultFabricId === fabric.id;
                       const marginVal = currentMode === "wholesale" ? cell.wholesaleMargin || 0 : cell.retailMargin || 0;
 
                       return (
@@ -318,8 +392,11 @@ export const PricingMatrixTable: React.FC<PricingMatrixTableProps> = ({
                           <td className="py-2.5 px-4">
                             <div className="flex items-center gap-2">
                               <span className="font-sans font-bold text-sm text-stone-100 group-hover:text-orange-400 transition-colors">{fabric.name}</span>
-                              {isLowest && <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 uppercase">Económico</span>}
-                              {isHighest && <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-purple-500/10 text-purple-400 border border-purple-500/20 uppercase">Premium</span>}
+                              {isDefaultFabric && (
+                                <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                                  [★ Principal]
+                                </span>
+                              )}
                             </div>
                             <div className="text-[11px] text-stone-400 mt-0.5">
                               Bs {fabric.pricePerUnit.toFixed(2)}/m

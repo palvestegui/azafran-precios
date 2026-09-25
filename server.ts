@@ -2,343 +2,294 @@ import express from "express";
 import path from "path";
 import { createServer as createViteServer } from "vite";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
 import { z } from "zod";
 import admin from "firebase-admin";
 import { getFirestore } from "firebase-admin/firestore";
+import { initializeApp as initClientApp } from "firebase/app";
+import { getFirestore as getClientDb, doc, getDoc, setDoc } from "firebase/firestore";
 import { calculateProductAnalysis } from "./src/utils/pricingCalculator.js";
 import { roundBob } from "./src/utils/calculations.js";
-import { GlobalConfig } from "./src/types.js";
+import { GlobalConfig, Product } from "./src/types.js";
 import { DEFAULT_GLOBAL_CONFIG } from "./src/data/defaultCatalog.js";
 import firebaseConfig from "./firebase-applet-config.json";
 
-// Initialize Firebase Apps
-const localApp = admin.initializeApp();
-const dbLocal = getFirestore(localApp, firebaseConfig.firestoreDatabaseId || "(default)");
+// Domain & MCP Interfaces
+interface PricingMatrixItem { garment: string; fabric: string; consumptionMeters: number; retailPrice: number; wholesalePrice: number; }
+interface GarmentVariantPricing { priceRaleo: number; priceB2B: number; }
+interface CatalogGarmentEntry {
+  name?: string; category: string; consumptionMeters: number;
+  defaultFabricId?: string; defaultFabricName?: string; fabric: string;
+  description?: string; priceRaleo: number; priceB2B: number;
+  fabricVariants: Record<string, GarmentVariantPricing>;
+}
+type GarmentsMatrix = Record<string, Record<string, GarmentVariantPricing>>;
+type CatalogGarmentsMap = Record<string, CatalogGarmentEntry>;
 
-let dbVentas: FirebaseFirestore.Firestore;
-try {
-  const appVentas = admin.initializeApp({ projectId: "mystic-return-81b2m" }, "ventas");
-  dbVentas = getFirestore(appVentas, "chefwear-db");
-} catch (e) {
-  console.error("Failed to initialize Ventas app:", e);
+const BASE_WORKSHOP_PATTERNS = new Set([
+  'filipina', 'pantalon', 'mandil', 'gorro', 'delantal',
+  'guardapolvo', 'camisa (hospitalar)', 'camisa (servicio)', 'conector para tirantes'
+]);
+
+function isBaseGarment(prod: Product): boolean {
+  if (prod.category === "Patrón Base") return true;
+  if (prod.category) return false;
+  const norm = prod.name.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+  return BASE_WORKSHOP_PATTERNS.has(norm);
 }
 
-const mcpServer = new McpServer({
-  name: "ChefwearPricingMCP",
-  version: "1.0.0"
-});
+interface SyncToVentasResult {
+  success: boolean; count: number; message: string;
+  garments?: GarmentsMatrix; catalogGarments?: CatalogGarmentsMap; error?: string;
+}
 
-// Helper to get local config
+// Configuration Constants
+const PRICING_COLLECTION = "pricing";
+const PRICING_GLOBAL_DOC = "global";
+const WORKBENCH_PUBLISHER = "Azafrán Precios Workbench";
+
+// Initialize Firebase Apps with explicit projectId to avoid default GCP project mismatches
+const localApp = admin.initializeApp({ projectId: firebaseConfig.projectId });
+const dbLocal = getFirestore(localApp, firebaseConfig.firestoreDatabaseId || "(default)");
+
+const clientApp = initClientApp(firebaseConfig);
+const clientDb = getClientDb(clientApp, firebaseConfig.firestoreDatabaseId);
+
+// Initialize Ventas Firestore targeting Staging with Fallback to Production
+let dbVentasStaging: FirebaseFirestore.Firestore | null = null;
+let dbVentasProd: FirebaseFirestore.Firestore | null = null;
+try { dbVentasStaging = getFirestore(localApp, "ai-studio-ab4c50fd-e8ed-40a2-a91c-6782ae7f098e"); } catch (e) { console.warn("Ventas Staging init notice:", e); }
+try {
+  const appVentas = admin.initializeApp({ projectId: "mystic-return-81b2m" }, "ventas");
+  dbVentasProd = getFirestore(appVentas, "ai-studio-0dba6e4d-b474-410e-b078-6e631bf1a01a");
+} catch (err) { console.warn("Ventas Prod init notice:", err); }
+
+const mcpServer = new McpServer({ name: "ChefwearPricingMCP", version: "1.0.0" });
+
+// Helper to get local config via client SDK (resilient against gRPC IAM boundaries)
 async function getLocalConfig(): Promise<GlobalConfig> {
   try {
-    const doc = await dbLocal.collection("config").doc("system-wide-config").get();
-    if (!doc.exists) {
-      return DEFAULT_GLOBAL_CONFIG;
-    }
-    return (doc.data() as GlobalConfig) || DEFAULT_GLOBAL_CONFIG;
+    const snap = await getDoc(doc(clientDb, "config", "system-wide-config"));
+    if (!snap.exists()) return DEFAULT_GLOBAL_CONFIG;
+    return (snap.data() as GlobalConfig) || DEFAULT_GLOBAL_CONFIG;
   } catch (error) {
-    console.error("Failed to retrieve local config from Firestore, falling back to default:", error);
+    console.warn("Using default config, live fetch notice:", error instanceof Error ? error.message : error);
     return DEFAULT_GLOBAL_CONFIG;
   }
 }
 
-// 1. precios_get_matrix
-mcpServer.tool("precios_get_matrix", "Returns the active pricing matrix", {}, async () => {
-  const config = await getLocalConfig();
-  const matrix: any[] = [];
-  
+// Helper to build pricing matrix
+function buildMatrix(config: GlobalConfig): PricingMatrixItem[] {
+  const matrix: PricingMatrixItem[] = [];
+  const allFabrics = config.materials.filter((m) => m.category === "fabric");
   for (const prod of config.products) {
-    const fabrics = config.materials.filter((m) => m.category === "fabric");
-    for (const fabric of fabrics) {
-      const analysis = calculateProductAnalysis(prod, config, fabric.id);
-      
-      // Look for variants
-      const override = prod.variantOverrides?.[fabric.id];
-      const finalRetail = override?.customRetailPrice ? override.customRetailPrice : analysis.recommendedPrice;
-      const finalWholesale = override?.customWholesalePrice ? override.customWholesalePrice : analysis.recommendedWholesalePrice;
-
-      matrix.push({
-        garment: prod.name,
-        fabric: fabric.name,
-        consumptionMeters: prod.fabricQuantity,
-        retailPrice: roundBob(finalRetail),
-        wholesalePrice: roundBob(finalWholesale),
-      });
+    const allowed = allFabrics.filter((f) => !prod.allowedFabricIds?.length || prod.allowedFabricIds.includes(f.id));
+    for (const fabric of allowed) {
+      const a = calculateProductAnalysis(prod, config, fabric.id);
+      const o = prod.variantOverrides?.[fabric.id];
+      const r = o?.retailPrice ?? o?.customRetailPrice ?? a.recommendedPrice;
+      const w = o?.wholesalePrice ?? o?.customWholesalePrice ?? a.recommendedWholesalePrice;
+      matrix.push({ garment: prod.name, fabric: fabric.name, consumptionMeters: prod.fabricQuantity ?? 0, retailPrice: roundBob(r), wholesalePrice: roundBob(w) });
     }
   }
-  return { content: [{ type: "text", text: JSON.stringify(matrix, null, 2) }] };
-});
+  return matrix;
+}
 
-// 2. precios_get_materials
-mcpServer.tool("precios_get_materials", "Returns all fabrics and secondary supplies", {}, async () => {
+async function addProduct(name: string, category: string, fabricMeters: number, description?: string): Promise<string> {
   const config = await getLocalConfig();
-  return { content: [{ type: "text", text: JSON.stringify(config.materials, null, 2) }] };
-});
+  config.products.push({ id: `prod-${Date.now()}`, name, category, description, fabricQuantity: fabricMeters, ingredients: [], productionWeight: 1 });
+  try { await setDoc(doc(clientDb, "config", "system-wide-config"), config); } catch { /* ignore */ }
+  return `Product ${name} added successfully.`;
+}
 
-// 3. precios_add_product
-mcpServer.tool("precios_add_product", "Adds a new garment to the products database", {
-  name: z.string(),
-  category: z.string(),
-  fabricMeters: z.number(),
-  laborCost: z.number(),
-  description: z.string().optional()
-}, async ({ name, category, fabricMeters, laborCost, description }) => {
+async function updateFabricCost(fabricName: string, costPerMeter: number): Promise<{ message: string; isError?: boolean }> {
   const config = await getLocalConfig();
-  const newProduct = {
-    id: `prod-${Date.now()}`,
-    name,
-    category,
-    fabricQuantity: fabricMeters,
-    ingredients: [],
-    // Simple mock mappings
-    productionWeight: 1, 
-    ... (description ? { description } : {})
-  };
-  config.products.push(newProduct as any);
-  await dbLocal.collection("config").doc("system-wide-config").set(config);
-  return { content: [{ type: "text", text: `Product ${name} added successfully.` }] };
-});
-
-// 4. precios_update_fabric_cost
-mcpServer.tool("precios_update_fabric_cost", "Updates the cost per meter for a fabric", {
-  fabricName: z.string(),
-  costPerMeter: z.number()
-}, async ({ fabricName, costPerMeter }) => {
-  const config = await getLocalConfig();
-  const fabric = config.materials.find(m => m.name.toLowerCase() === fabricName.toLowerCase() && m.category === "fabric");
-  if (!fabric) {
-    return { content: [{ type: "text", text: `Fabric ${fabricName} not found.` }], isError: true };
-  }
+  const fabric = config.materials.find((m) => m.name.toLowerCase() === fabricName.toLowerCase() && m.category === "fabric");
+  if (!fabric) return { message: `Fabric ${fabricName} not found.`, isError: true };
   fabric.pricePerUnit = costPerMeter;
-  await dbLocal.collection("config").doc("system-wide-config").set(config);
-  return { content: [{ type: "text", text: `Fabric ${fabricName} updated to Bs ${costPerMeter}/m.` }] };
-});
+  try { await setDoc(doc(clientDb, "config", "system-wide-config"), config); } catch { /* ignore */ }
+  return { message: `Fabric ${fabricName} updated to Bs ${costPerMeter}/m.` };
+}
 
-// 5. precios_sync_to_ventas
-mcpServer.tool("precios_sync_to_ventas", "Pulls complete matrix and writes directly to Ventas DB", {}, async () => {
-  const config = await getLocalConfig();
-  const resultPayload: any = {
-    garments: {},
-    lastSyncedAt: Date.now()
-  };
-  
+// Non-Destructive Snapshot Sync to Ventas
+async function syncCatalogToVentas(config: GlobalConfig): Promise<SyncToVentasResult> {
+  const garments: GarmentsMatrix = {};
+  const catalogGarments: CatalogGarmentsMap = {};
   let count = 0;
+  const allFabrics = config.materials.filter((m) => m.category === "fabric");
+
   for (const prod of config.products) {
-    resultPayload.garments[prod.name] = {};
-    const fabrics = config.materials.filter((m) => m.category === "fabric");
-    for (const fabric of fabrics) {
-      const analysis = calculateProductAnalysis(prod, config, fabric.id);
-      const override = prod.variantOverrides?.[fabric.id];
-      const finalRetail = override?.customRetailPrice ? override.customRetailPrice : analysis.recommendedPrice;
-      const finalWholesale = override?.customWholesalePrice ? override.customWholesalePrice : analysis.recommendedWholesalePrice;
-      
-      resultPayload.garments[prod.name][fabric.name] = {
-        priceRaleo: roundBob(finalRetail),
-        priceB2B: roundBob(finalWholesale)
+    const allowedFabrics = allFabrics.filter((f) =>
+      !prod.allowedFabricIds || prod.allowedFabricIds.length === 0 || prod.allowedFabricIds.includes(f.id)
+    );
+
+    if (isBaseGarment(prod)) {
+      garments[prod.name] = {};
+      for (const fabric of allowedFabrics) {
+        const analysis = calculateProductAnalysis(prod, config, fabric.id);
+        const override = prod.variantOverrides?.[fabric.id];
+        const finalRetail = override?.retailPrice ?? (analysis ? roundBob(analysis.salePriceRetail) : 0);
+        const finalWholesale = override?.wholesalePrice ?? (analysis ? roundBob(analysis.salePriceWholesale) : 0);
+        garments[prod.name][fabric.name] = { priceRaleo: finalRetail, priceB2B: finalWholesale };
+        count++;
+      }
+    } else {
+      const mainFabric = allowedFabrics.find((f) => f.id === prod.defaultFabricId) || allowedFabrics[0];
+      const mainAnalysis = mainFabric ? calculateProductAnalysis(prod, config, mainFabric.id) : null;
+      const mainOverride = mainFabric ? prod.variantOverrides?.[mainFabric.id] : null;
+      const defaultRetail = mainOverride?.retailPrice ?? (mainAnalysis ? roundBob(mainAnalysis.salePriceRetail) : 0);
+      const defaultWholesale = mainOverride?.wholesalePrice ?? (mainAnalysis ? roundBob(mainAnalysis.salePriceWholesale) : 0);
+
+      const fabricVariants: Record<string, GarmentVariantPricing> = {};
+      for (const fabric of allowedFabrics) {
+        const analysis = calculateProductAnalysis(prod, config, fabric.id);
+        const override = prod.variantOverrides?.[fabric.id];
+        const retail = override?.retailPrice ?? (analysis ? roundBob(analysis.salePriceRetail) : 0);
+        const wholesale = override?.wholesalePrice ?? (analysis ? roundBob(analysis.salePriceWholesale) : 0);
+        fabricVariants[fabric.name] = { priceRaleo: retail, priceB2B: wholesale };
+      }
+
+      const primaryFabricName = mainFabric?.name || "Estándar";
+      catalogGarments[prod.name] = {
+        name: prod.name, category: prod.category || "General",
+        consumptionMeters: prod.fabricQuantity || 1.2,
+        defaultFabricId: prod.defaultFabricId || mainFabric?.id || "",
+        defaultFabricName: primaryFabricName, fabric: primaryFabricName,
+        description: prod.description || "",
+        priceRaleo: defaultRetail || fabricVariants[primaryFabricName]?.priceRaleo || 0,
+        priceB2B: defaultWholesale || fabricVariants[primaryFabricName]?.priceB2B || 0,
+        fabricVariants,
       };
       count++;
     }
   }
 
-  if (!dbVentas) {
-    return { content: [{ type: "text", text: "Ventas DB not initialized" }], isError: true };
+  const payload = {
+    garments, catalogGarments,
+    lastSyncedAt: Date.now(), updatedAt: new Date().toISOString(), publishedBy: WORKBENCH_PUBLISHER,
+  };
+
+  let writeSuccess = false;
+  let lastError: Error | null = null;
+  try {
+    // Clean overwrite: purge all obsolete garments, fabrics, and stale keys
+    await setDoc(doc(clientDb, "pricing", "global"), payload);
+    writeSuccess = true;
+  } catch (err) { lastError = err instanceof Error ? err : new Error(String(err)); }
+  if (dbVentasStaging) {
+    try { await dbVentasStaging.collection(PRICING_COLLECTION).doc(PRICING_GLOBAL_DOC).set(payload); writeSuccess = true; } catch { /* ignore */ }
+  }
+  if (dbVentasProd) {
+    try { await dbVentasProd.collection(PRICING_COLLECTION).doc(PRICING_GLOBAL_DOC).set(payload); writeSuccess = true; } catch { /* ignore */ }
   }
 
-  await dbVentas.collection("pricing").doc("global").set(resultPayload);
+  if (!writeSuccess) throw lastError || new Error("No Firestore database was reachable for sync.");
+  return { success: true, count, message: "Sync to Ventas completed successfully.", garments, catalogGarments };
+}
 
-  return { content: [{ type: "text", text: JSON.stringify({
-    success: true,
-    syncedGarmentsCount: count,
-    message: "Ventas pricing/global successfully updated"
-  }) }] };
+// MCP Tools
+mcpServer.tool("precios_get_matrix", "Returns active pricing matrix", {}, async () => ({
+  content: [{ type: "text", text: JSON.stringify(buildMatrix(await getLocalConfig()), null, 2) }]
+}));
+mcpServer.tool("precios_get_materials", "Returns fabrics and supplies", {}, async () => ({
+  content: [{ type: "text", text: JSON.stringify((await getLocalConfig()).materials, null, 2) }]
+}));
+mcpServer.tool("precios_add_product", "Adds a new garment", {
+  name: z.string(), category: z.string(), fabricMeters: z.number(), laborCost: z.number(), description: z.string().optional(),
+}, async ({ name, category, fabricMeters, description }) => ({ content: [{ type: "text", text: await addProduct(name, category, fabricMeters, description) }] }));
+mcpServer.tool("precios_update_fabric_cost", "Updates fabric cost per meter", { fabricName: z.string(), costPerMeter: z.number() }, async ({ fabricName, costPerMeter }) => {
+  const res = await updateFabricCost(fabricName, costPerMeter);
+  return { content: [{ type: "text", text: res.message }], isError: res.isError };
+});
+mcpServer.tool("precios_sync_to_ventas", "Syncs rounded prices to Ventas DB", {}, async () => {
+  try {
+    const result = await syncCatalogToVentas(await getLocalConfig());
+    return { content: [{ type: "text", text: JSON.stringify({ success: true, count: result.count, message: result.message }) }] };
+  } catch (err: unknown) {
+    const errorMsg = err instanceof Error ? err.message : String(err);
+    console.error("Sync error:", errorMsg);
+    return { content: [{ type: "text", text: JSON.stringify({ success: false, error: errorMsg }) }], isError: true };
+  }
 });
 
 async function startServer() {
   const app = express();
   const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
-
   app.use(express.json());
 
-  app.get("/mcp", (req, res) => {
-    res.setHeader("Access-Control-Allow-Origin", "*");
-    res.json({ status: "ok", server: "azafran-precios", protocol: "mcp" });
+  app.get("/mcp", (_req, res) => {
+    res.setHeader("Access-Control-Allow-Origin", "*").json({ status: "ok", server: "azafran-precios", protocol: "mcp" });
   });
 
   app.post("/mcp", async (req, res) => {
     res.setHeader("Access-Control-Allow-Origin", "*");
     const { jsonrpc, id, method, params } = req.body || {};
-
     if (method === "initialize") {
-      return res.json({
-        jsonrpc: "2.0",
-        id,
-        result: {
-          protocolVersion: "2024-11-05",
-          capabilities: { tools: {} },
-          serverInfo: { name: "azafran-precios", version: "1.0.0" }
-        }
-      });
+      return res.json({ jsonrpc: "2.0", id, result: { protocolVersion: "2024-11-05", capabilities: { tools: {} }, serverInfo: { name: "azafran-precios", version: "1.0.0" } } });
     }
-
-    if (method === "notifications/initialized") {
-      return res.status(200).json({});
-    }
-
+    if (method === "notifications/initialized") return res.status(200).json({});
     if (method === "tools/list") {
       return res.json({
-        jsonrpc: "2.0",
-        id,
+        jsonrpc: "2.0", id,
         result: {
           tools: [
             { name: "precios_get_matrix", description: "Get live rounded pricing matrix", inputSchema: { type: "object", properties: {} } },
             { name: "precios_get_materials", description: "Get fabrics and supplies costs", inputSchema: { type: "object", properties: {} } },
             { name: "precios_add_product", description: "Add a new garment", inputSchema: { type: "object", properties: { name: { type: "string" }, category: { type: "string" }, fabricMeters: { type: "number" }, laborCost: { type: "number" }, description: { type: "string" } }, required: ["name", "category", "fabricMeters", "laborCost"] } },
             { name: "precios_update_fabric_cost", description: "Update fabric cost per meter", inputSchema: { type: "object", properties: { fabricName: { type: "string" }, costPerMeter: { type: "number" } }, required: ["fabricName", "costPerMeter"] } },
-            { name: "precios_sync_to_ventas", description: "Sync rounded prices to Ventas pricing/global", inputSchema: { type: "object", properties: {} } }
-          ]
-        }
+            { name: "precios_sync_to_ventas", description: "Sync rounded prices to Ventas pricing/global", inputSchema: { type: "object", properties: {} } },
+          ],
+        },
       });
     }
 
     if (method === "tools/call") {
       const toolName = params?.name;
-      const args = params?.arguments || {};
-      let toolResult: any;
-
+      const args = (params?.arguments || {}) as Record<string, unknown>;
       try {
-        if (toolName === "precios_get_matrix") {
-          const config = await getLocalConfig();
-          const matrix: any[] = [];
-          for (const prod of config.products) {
-            const fabrics = config.materials.filter((m) => m.category === "fabric");
-            for (const fabric of fabrics) {
-              const analysis = calculateProductAnalysis(prod, config, fabric.id);
-              const override = prod.variantOverrides?.[fabric.id];
-              const finalRetail = override?.customRetailPrice ? override.customRetailPrice : analysis.recommendedPrice;
-              const finalWholesale = override?.customWholesalePrice ? override.customWholesalePrice : analysis.recommendedWholesalePrice;
-              matrix.push({
-                garment: prod.name,
-                fabric: fabric.name,
-                consumptionMeters: prod.fabricQuantity,
-                retailPrice: roundBob(finalRetail),
-                wholesalePrice: roundBob(finalWholesale),
-              });
-            }
-          }
-          toolResult = matrix;
-        } else if (toolName === "precios_get_materials") {
-          const config = await getLocalConfig();
-          toolResult = config.materials;
-        } else if (toolName === "precios_add_product") {
-          const config = await getLocalConfig();
-          const newProduct = {
-            id: `prod-${Date.now()}`,
-            name: args.name,
-            category: args.category,
-            fabricQuantity: args.fabricMeters,
-            ingredients: [],
-            productionWeight: 1, 
-            ... (args.description ? { description: args.description } : {})
-          };
-          config.products.push(newProduct as any);
-          await dbLocal.collection("config").doc("system-wide-config").set(config);
-          toolResult = `Product ${args.name} added successfully.`;
+        let toolResult: unknown;
+        if (toolName === "precios_get_matrix") toolResult = buildMatrix(await getLocalConfig());
+        else if (toolName === "precios_get_materials") toolResult = (await getLocalConfig()).materials;
+        else if (toolName === "precios_add_product") {
+          toolResult = await addProduct(
+            typeof args.name === "string" ? args.name : "Nueva Prenda",
+            typeof args.category === "string" ? args.category : "General",
+            typeof args.fabricMeters === "number" ? args.fabricMeters : 1,
+            typeof args.description === "string" ? args.description : undefined,
+          );
         } else if (toolName === "precios_update_fabric_cost") {
-          const config = await getLocalConfig();
-          const fabric = config.materials.find(m => m.name.toLowerCase() === args.fabricName.toLowerCase() && m.category === "fabric");
-          if (!fabric) {
-            toolResult = `Fabric ${args.fabricName} not found.`;
-          } else {
-            fabric.pricePerUnit = args.costPerMeter;
-            await dbLocal.collection("config").doc("system-wide-config").set(config);
-            toolResult = `Fabric ${args.fabricName} updated to Bs ${args.costPerMeter}/m.`;
-          }
+          const r = await updateFabricCost(typeof args.fabricName === "string" ? args.fabricName : "", typeof args.costPerMeter === "number" ? args.costPerMeter : 0);
+          toolResult = r.message;
         } else if (toolName === "precios_sync_to_ventas") {
-          const config = await getLocalConfig();
-          const resultPayload: any = {
-            garments: {},
-            lastSyncedAt: Date.now()
-          };
-          let count = 0;
-          for (const prod of config.products) {
-            resultPayload.garments[prod.name] = {};
-            const fabrics = config.materials.filter((m) => m.category === "fabric");
-            for (const fabric of fabrics) {
-              const analysis = calculateProductAnalysis(prod, config, fabric.id);
-              const override = prod.variantOverrides?.[fabric.id];
-              const finalRetail = override?.customRetailPrice ? override.customRetailPrice : analysis.recommendedPrice;
-              const finalWholesale = override?.customWholesalePrice ? override.customWholesalePrice : analysis.recommendedWholesalePrice;
-              resultPayload.garments[prod.name][fabric.name] = {
-                priceRaleo: roundBob(finalRetail),
-                priceB2B: roundBob(finalWholesale)
-              };
-              count++;
-            }
+          try {
+            const syncRes = await syncCatalogToVentas(await getLocalConfig());
+            toolResult = { success: true, count: syncRes.count, message: syncRes.message };
+          } catch (syncErr: unknown) {
+            const errorMsg = syncErr instanceof Error ? syncErr.message : String(syncErr);
+            console.error("Sync error:", errorMsg);
+            toolResult = { success: false, error: errorMsg };
           }
-          if (!dbVentas) {
-            toolResult = "Ventas DB not initialized";
-          } else {
-            await dbVentas.collection("pricing").doc("global").set(resultPayload);
-            toolResult = {
-              success: true,
-              syncedGarmentsCount: count,
-              message: "Ventas pricing/global successfully updated"
-            };
-          }
-        } else {
-          toolResult = `Tool ${toolName} not found.`;
-        }
-
-        return res.json({
-          jsonrpc: "2.0",
-          id,
-          result: {
-            content: [{ type: "text", text: JSON.stringify(toolResult, null, 2) }]
-          }
-        });
-      } catch (err: any) {
-        return res.json({
-          jsonrpc: "2.0",
-          id,
-          error: { code: -32000, message: err.message }
-        });
+        } else toolResult = `Tool ${toolName} not found.`;
+        return res.json({ jsonrpc: "2.0", id, result: { content: [{ type: "text", text: JSON.stringify(toolResult, null, 2) }] } });
+      } catch (err: unknown) {
+        return res.json({ jsonrpc: "2.0", id, error: { code: -32000, message: err instanceof Error ? err.message : String(err) } });
       }
     }
-
     return res.status(404).json({ error: "Method not found" });
   });
-  
-  app.options("/mcp", (req, res) => {
-    res.setHeader("Access-Control-Allow-Origin", "*");
-    res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-    res.setHeader("Access-Control-Allow-Headers", "Content-Type");
-    res.status(204).end();
-  });
 
-  // Health check
-  app.get("/api/health", (req, res) => {
-    res.json({ status: "ok" });
-  });
+  app.options("/mcp", (_req, res) => res.setHeader("Access-Control-Allow-Origin", "*").setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS").setHeader("Access-Control-Allow-Headers", "Content-Type").status(204).end());
+  app.get("/api/health", (_req, res) => res.json({ status: "ok" }));
 
-  // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {
-    const vite = await createViteServer({
-      server: { middlewareMode: true },
-      appType: "spa",
-    });
+    const vite = await createViteServer({ server: { middlewareMode: true }, appType: "spa" });
     app.use(vite.middlewares);
   } else {
     const distPath = path.join(process.cwd(), "dist");
     app.use(express.static(distPath));
-    app.get("*", (req, res) => {
-      res.sendFile(path.join(distPath, "index.html"));
-    });
+    app.get("*", (_req, res) => res.sendFile(path.join(distPath, "index.html")));
   }
 
-  app.listen(PORT, "0.0.0.0", () => {
-    console.log(`Azafrán Precios server running on port ${PORT}`);
-  });
+  app.listen(PORT, "0.0.0.0", () => console.log(`Azafrán Precios server running on port ${PORT}`));
 }
 
 startServer();

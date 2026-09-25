@@ -110,22 +110,13 @@ export function validateMaterial(raw: unknown): Material | null {
   if (typeof raw.isSoldSeparately === "boolean") {
     mat.isSoldSeparately = raw.isSoldSeparately;
   }
-  if (typeof raw.retailMargin === "number" && !isNaN(raw.retailMargin) && isFinite(raw.retailMargin)) {
-    mat.retailMargin = raw.retailMargin;
-  } else if (typeof raw.retailMargin === "string" && raw.retailMargin.trim() !== "") {
-    const parsed = parseFloat(raw.retailMargin);
-    if (!isNaN(parsed) && isFinite(parsed)) {
-      mat.retailMargin = parsed;
-    }
+  if (typeof raw.retailMargin === "number" || typeof raw.retailMargin === "string") {
+    const val = sanitizeNumber(raw.retailMargin, NaN);
+    if (!isNaN(val)) mat.retailMargin = val;
   }
-
-  if (typeof raw.wholesaleMargin === "number" && !isNaN(raw.wholesaleMargin) && isFinite(raw.wholesaleMargin)) {
-    mat.wholesaleMargin = raw.wholesaleMargin;
-  } else if (typeof raw.wholesaleMargin === "string" && raw.wholesaleMargin.trim() !== "") {
-    const parsed = parseFloat(raw.wholesaleMargin);
-    if (!isNaN(parsed) && isFinite(parsed)) {
-      mat.wholesaleMargin = parsed;
-    }
+  if (typeof raw.wholesaleMargin === "number" || typeof raw.wholesaleMargin === "string") {
+    const val = sanitizeNumber(raw.wholesaleMargin, NaN);
+    if (!isNaN(val)) mat.wholesaleMargin = val;
   }
 
   return mat;
@@ -149,6 +140,9 @@ export function validateProduct(raw: unknown): Product | null {
 
   const prod: Product = { id, name, ingredients };
 
+  if (typeof raw.category === "string") {
+    prod.category = raw.category.trim();
+  }
   if (typeof raw.defaultFabricId === "string") {
     prod.defaultFabricId = raw.defaultFabricId;
   }
@@ -162,39 +156,26 @@ export function validateProduct(raw: unknown): Product | null {
     }
   }
   if (Array.isArray(raw.allowedFabricIds)) {
-    prod.allowedFabricIds = raw.allowedFabricIds
-      .map((fid) => sanitizeString(fid))
-      .filter(Boolean);
+    prod.allowedFabricIds = raw.allowedFabricIds.map((fid) => sanitizeString(fid)).filter(Boolean);
   } else {
     const fallbackProd = DEFAULT_GLOBAL_CONFIG.products?.find((p) => p.id === id);
     if (fallbackProd?.allowedFabricIds && fallbackProd.allowedFabricIds.length > 0) {
       prod.allowedFabricIds = [...fallbackProd.allowedFabricIds];
     }
   }
-  if (typeof raw.profitMargin === "number" && !isNaN(raw.profitMargin) && isFinite(raw.profitMargin)) {
-    prod.profitMargin = raw.profitMargin;
-  } else if (typeof raw.profitMargin === "string" && raw.profitMargin.trim() !== "") {
-    const parsed = parseFloat(raw.profitMargin);
-    if (!isNaN(parsed) && isFinite(parsed)) {
-      prod.profitMargin = parsed;
-    }
+  if (typeof raw.profitMargin === "number" || typeof raw.profitMargin === "string") {
+    const val = sanitizeNumber(raw.profitMargin, NaN);
+    if (!isNaN(val)) prod.profitMargin = val;
   }
-
-  if (typeof raw.wholesaleMargin === "number" && !isNaN(raw.wholesaleMargin) && isFinite(raw.wholesaleMargin)) {
-    prod.wholesaleMargin = raw.wholesaleMargin;
-  } else if (typeof raw.wholesaleMargin === "string" && raw.wholesaleMargin.trim() !== "") {
-    const parsed = parseFloat(raw.wholesaleMargin);
-    if (!isNaN(parsed) && isFinite(parsed)) {
-      prod.wholesaleMargin = parsed;
-    }
+  if (typeof raw.wholesaleMargin === "number" || typeof raw.wholesaleMargin === "string") {
+    const val = sanitizeNumber(raw.wholesaleMargin, NaN);
+    if (!isNaN(val)) prod.wholesaleMargin = val;
   }
-
-  if (typeof raw.productionWeight === "number" && !isNaN(raw.productionWeight) && raw.productionWeight > 0) {
-    prod.productionWeight = raw.productionWeight;
-  } else if (typeof raw.productionWeight === "string" && raw.productionWeight.trim() !== "") {
-    const parsed = parseFloat(raw.productionWeight);
-    prod.productionWeight = !isNaN(parsed) && parsed > 0 ? parsed : 1.0;
-  } else {
+  if (typeof raw.productionWeight === "number" || typeof raw.productionWeight === "string") {
+    const val = sanitizeNumber(raw.productionWeight, NaN);
+    if (!isNaN(val) && val > 0) prod.productionWeight = val;
+  }
+  if (!prod.productionWeight || prod.productionWeight <= 0) {
     const fallbackProd = DEFAULT_GLOBAL_CONFIG.products?.find((p) => p.id === id);
     prod.productionWeight = fallbackProd?.productionWeight && fallbackProd.productionWeight > 0 ? fallbackProd.productionWeight : 1.0;
   }

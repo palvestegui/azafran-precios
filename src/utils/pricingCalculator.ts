@@ -18,10 +18,12 @@ export interface ProductAnalysisResult {
   overheadAllocation: number;
   costFloor: number;
   recommendedPrice: number;
+  salePriceRetail: number;
   profitPerUnit: number;
   breakEvenUnits: number;
   appliedMargin: number;
   recommendedWholesalePrice: number;
+  salePriceWholesale: number;
   wholesaleProfitPerUnit: number;
   wholesaleBreakEvenUnits: number;
   appliedWholesaleMargin: number;
@@ -171,10 +173,12 @@ export function calculateProductAnalysis(
     overheadAllocation,
     costFloor,
     recommendedPrice,
+    salePriceRetail: recommendedPrice,
     profitPerUnit,
     breakEvenUnits,
     appliedMargin,
     recommendedWholesalePrice,
+    salePriceWholesale: recommendedWholesalePrice,
     wholesaleProfitPerUnit,
     wholesaleBreakEvenUnits,
     appliedWholesaleMargin,

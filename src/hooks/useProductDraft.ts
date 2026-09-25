@@ -51,6 +51,7 @@ function cloneProduct(p: Product): Product {
 
 function areProductsEqual(a: Product, b: Product): boolean {
   if (a.id !== b.id || a.name !== b.name) return false;
+  if ((a.category || "").trim() !== (b.category || "").trim()) return false;
   if ((a.defaultFabricId || "") !== (b.defaultFabricId || "")) return false;
   if (Number(a.fabricQuantity || 0) !== Number(b.fabricQuantity || 0)) return false;
   if (Number(a.profitMargin || 0) !== Number(b.profitMargin || 0)) return false;

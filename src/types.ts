@@ -41,11 +41,15 @@ export interface Material {
 export interface VariantPriceOverride {
   customRetailPrice?: number;
   customWholesalePrice?: number;
+  retailPrice?: number;
+  wholesalePrice?: number;
 }
 
 export interface Product {
   id: string;
   name: string;
+  category?: string;
+  description?: string;
   defaultFabricId?: string;
   fabricQuantity?: number;
   allowedFabricIds?: string[];

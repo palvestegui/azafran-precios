@@ -86,6 +86,20 @@
         "suggestedPrice": { "type": "number" }
       },
       "required": ["name", "brand", "userId", "createdAt", "updatedAt", "status", "floorPrice", "suggestedPrice"]
+    },
+    "PricingSnapshot": {
+      "title": "Pricing Snapshot",
+      "description": "Global calculated pricing matrix and catalog snapshots for Ventas synchronization.",
+      "type": "object",
+      "properties": {
+        "garments": { "type": "object" },
+        "catalogGarments": { "type": "object" },
+        "catalog": { "type": "object" },
+        "lastSyncedAt": { "type": "number" },
+        "updatedAt": { "type": "string" },
+        "publishedBy": { "type": "string" }
+      },
+      "required": ["garments", "catalogGarments", "lastSyncedAt", "updatedAt"]
     }
   },
   "firestore": {
@@ -96,6 +110,10 @@
     "audits/{auditId}": {
       "schema": "PricingAudit",
       "description": "Collection of pricing audits."
+    },
+    "pricing/{pricingId}": {
+      "schema": "PricingSnapshot",
+      "description": "Published pricing matrix and catalog snapshots."
     }
   }
 }

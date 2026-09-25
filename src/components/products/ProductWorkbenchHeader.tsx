@@ -35,6 +35,35 @@ export function ProductWorkbenchHeader({
         />
       </div>
 
+      {/* CATEGORÍA DE PRENDA */}
+      <div className="flex-1 min-w-[180px]">
+        <label className="text-[10px] uppercase font-bold text-stone-500 tracking-wider mb-1 block">
+          Categoría
+        </label>
+        <div className="relative">
+          <input
+            type="text"
+            list="product-categories-list"
+            value={draftProduct.category || ""}
+            onChange={(e) => updateDraft({ category: e.target.value })}
+            placeholder="Ej. Filipinas, Mandiles Botánica..."
+            className="w-full bg-stone-950 border border-stone-800 rounded-lg px-3 py-2 text-white placeholder:text-stone-600 focus:border-amber-500 outline-none text-sm font-bold transition-colors"
+          />
+          <datalist id="product-categories-list">
+            <option value="Patrón Base" />
+            <option value="Filipinas" />
+            <option value="Mandiles Botánica" />
+            <option value="Mandiles Especiales" />
+            <option value="Chamarras" />
+            <option value="Pantalones" />
+            <option value="Gorros" />
+            <option value="Guardapolvos" />
+            <option value="Camisas" />
+            <option value="Accesorios" />
+          </datalist>
+        </div>
+      </div>
+
       {/* Esfuerzo (x) */}
       <div className="w-28">
         <label className="text-[10px] uppercase font-bold text-stone-500 tracking-wider mb-1 block">
