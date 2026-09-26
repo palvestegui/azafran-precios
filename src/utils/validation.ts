@@ -20,6 +20,7 @@ export const VALID_UNITS: readonly Unit[] = [
   "spool",
   "service",
   "batch",
+  "pie",
 ] as const;
 
 export const VALID_PERIODS: readonly PaymentPeriod[] = [

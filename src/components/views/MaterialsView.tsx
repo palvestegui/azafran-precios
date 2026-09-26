@@ -1,6 +1,7 @@
 import React, { useState } from "react";
-import { Plus, Trash2 } from "lucide-react";
+import { Plus, Trash2, Check, X } from "lucide-react";
 import { GlobalConfig, Material, Unit } from "../../types";
+import { cn } from "../../lib/utils";
 import {
   DEFAULT_RETAIL_MARGIN,
   DEFAULT_WHOLESALE_MARGIN,
@@ -36,11 +37,11 @@ export function MaterialsView({
   const [isSentinelOpen, setIsSentinelOpen] = useState(false);
   const [searchFilter, setSearchFilter] = useState<string>("");
 
-  const addMaterial = (category: "fabric" | "other") => {
-    const newId = crypto.randomUUID
-      ? crypto.randomUUID()
-      : Math.random().toString(36).substring(2, 9);
+  const [draftSupplyRows, setDraftSupplyRows] = useState<Record<string, Partial<Material>>>({});
+  const [draftFabricRows, setDraftFabricRows] = useState<Record<string, Partial<Material>>>({});
 
+  const addMaterial = (category: "fabric" | "other") => {
+    const newId = crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2, 9);
     const newMaterial: Material = {
       id: newId,
       name: category === "fabric" ? "Nueva Tela" : "Nuevo Insumo",
@@ -49,16 +50,8 @@ export function MaterialsView({
       pricePerUnit: 0,
       wastagePercentage: category === "fabric" ? 3 : 0,
     };
-
-    onChange({
-      ...config,
-      materials: [newMaterial, ...config.materials],
-    });
-
-    onNotify?.(
-      `Se agregó ${category === "fabric" ? "la tela" : "el insumo"} a la lista`,
-      "info"
-    );
+    onChange({ ...config, materials: [newMaterial, ...config.materials] });
+    onNotify?.(`Se agregó ${category === "fabric" ? "la tela" : "el insumo"} a la lista`, "info");
   };
 
   const removeMaterial = (id: string) => {
@@ -67,52 +60,65 @@ export function MaterialsView({
       ...p,
       ingredients: p.ingredients.filter((i) => i.materialId !== id),
     }));
-
-    onChange({
-      ...config,
-      products: newProducts,
-      materials: config.materials.filter((m) => m.id !== id),
-    });
-
+    onChange({ ...config, products: newProducts, materials: config.materials.filter((m) => m.id !== id) });
+    setDraftFabricRows((prev) => { if (!prev[id]) return prev; const next = { ...prev }; delete next[id]; return next; });
+    setDraftSupplyRows((prev) => { if (!prev[id]) return prev; const next = { ...prev }; delete next[id]; return next; });
     onNotify?.(`"${target?.name || "Material"}" eliminado`, "info");
   };
 
   const saveMaterial = (updated: Material) => {
     const risks = checkMaterialPriceImpact(updated, config);
-
-    onChange({
-      ...config,
-      materials: config.materials.map((m) =>
-        m.id === updated.id ? updated : m
-      ),
-    });
-
+    onChange({ ...config, materials: config.materials.map((m) => (m.id === updated.id ? updated : m)) });
     if (risks.length > 0) {
       setSentinelRisks(risks);
       setSentinelMaterialName(updated.name);
       setIsSentinelOpen(true);
       const criticalCount = risks.filter((r) => r.severity === "critical").length;
       if (criticalCount > 0) {
-        onNotify?.(
-          `¡Alerta Sentinel! Se detectaron ${criticalCount} prendas con venta a pérdida`,
-          "error"
-        );
+        onNotify?.(`¡Alerta Sentinel! Se detectaron ${criticalCount} prendas con venta a pérdida`, "error");
       }
     }
   };
 
-  const updateMaterialField = <K extends keyof Material>(
-    id: string,
-    field: K,
-    value: Material[K]
-  ) => {
-    const target = config.materials.find((m) => m.id === id);
-    if (!target) return;
-    saveMaterial({ ...target, [field]: value });
+  const updateFabricField = <K extends keyof Material>(id: string, field: K, value: Material[K]) => {
+    const original = config.materials.find((m) => m.id === id);
+    if (!original) return;
+    setDraftFabricRows((prev) => ({ ...prev, [id]: { ...(prev[id] || original), [field]: value } }));
   };
 
-  const updateFabricField = updateMaterialField;
-  const updateSupplyField = updateMaterialField;
+  const handleSaveFabricRow = (id: string) => {
+    const draft = draftFabricRows[id];
+    const original = config.materials.find((m) => m.id === id);
+    if (!draft || !original) return;
+    const updated: Material = { ...original, ...draft };
+    saveMaterial(updated);
+    setDraftFabricRows((prev) => { const next = { ...prev }; delete next[id]; return next; });
+    onNotify?.(`"${updated.name}" guardada`, "success");
+  };
+
+  const handleCancelFabricRow = (id: string) => {
+    setDraftFabricRows((prev) => { const next = { ...prev }; delete next[id]; return next; });
+  };
+
+  const updateSupplyField = <K extends keyof Material>(id: string, field: K, value: Material[K]) => {
+    const original = config.materials.find((m) => m.id === id);
+    if (!original) return;
+    setDraftSupplyRows((prev) => ({ ...prev, [id]: { ...(prev[id] || original), [field]: value } }));
+  };
+
+  const handleSaveSupplyRow = (id: string) => {
+    const draft = draftSupplyRows[id];
+    const original = config.materials.find((m) => m.id === id);
+    if (!draft || !original) return;
+    const updated: Material = { ...original, ...draft };
+    saveMaterial(updated);
+    setDraftSupplyRows((prev) => { const next = { ...prev }; delete next[id]; return next; });
+    onNotify?.(`"${updated.name}" guardado`, "success");
+  };
+
+  const handleCancelSupplyRow = (id: string) => {
+    setDraftSupplyRows((prev) => { const next = { ...prev }; delete next[id]; return next; });
+  };
 
   const defaultRetail = config.profitMargin || DEFAULT_RETAIL_MARGIN;
   const defaultWholesale = config.wholesaleMargin || DEFAULT_WHOLESALE_MARGIN;
@@ -185,15 +191,17 @@ export function MaterialsView({
                 </thead>
                 <tbody className="divide-y divide-stone-800/60">
                   {fabrics.map((mat) => {
-                    const baseMetroCost = (Number(mat.pricePerUnit) || 0) + (Number(mat.extraCosts) || 0);
-                    const realMetroCost = baseMetroCost * (1 + (Number(mat.wastagePercentage) || 0) / 100);
+                    const isDirty = Boolean(draftFabricRows[mat.id]);
+                    const current = draftFabricRows[mat.id] ? { ...mat, ...draftFabricRows[mat.id] } : mat;
+                    const baseMetroCost = (Number(current.pricePerUnit) || 0) + (Number(current.extraCosts) || 0);
+                    const realMetroCost = baseMetroCost * (1 + (Number(current.wastagePercentage) || 0) / 100);
                     return (
-                      <tr key={mat.id} className="hover:bg-stone-800/30 transition-colors group">
+                      <tr key={mat.id} className={cn("transition-colors group", isDirty ? "bg-amber-500/5 hover:bg-amber-500/10" : "hover:bg-stone-800/30")}>
                         <td className="py-2.5 px-4">
                           <input
                             type="text"
-                            defaultValue={mat.name}
-                            onBlur={(e) => updateMaterialField(mat.id, "name", e.target.value)}
+                            value={current.name}
+                            onChange={(e) => updateFabricField(mat.id, "name", e.target.value)}
                             className="bg-transparent text-white font-bold text-sm w-full border-b border-transparent hover:border-stone-700 focus:border-orange-500 focus:outline-none"
                           />
                         </td>
@@ -202,9 +210,9 @@ export function MaterialsView({
                           <input
                             type="number"
                             step="0.5"
-                            defaultValue={mat.pricePerUnit || 0}
+                            value={current.pricePerUnit === 0 && !draftFabricRows[mat.id] ? 0 : current.pricePerUnit ?? ""}
                             onWheel={(e) => e.currentTarget.blur()}
-                            onBlur={(e) => updateMaterialField(mat.id, "pricePerUnit", Number(e.target.value))}
+                            onChange={(e) => updateFabricField(mat.id, "pricePerUnit", e.target.value === "" ? 0 : Number(e.target.value))}
                             className="w-full bg-stone-950 border border-stone-800 rounded-lg p-1.5 text-xs font-mono text-amber-400 text-right focus:outline-none focus:border-orange-500"
                           />
                         </td>
@@ -213,7 +221,7 @@ export function MaterialsView({
                             type="number"
                             min="0"
                             step="0.01"
-                            value={mat.extraCosts ?? ""}
+                            value={current.extraCosts ?? ""}
                             placeholder="0.00"
                             onWheel={(e) => e.currentTarget.blur()}
                             onChange={(e) => {
@@ -227,9 +235,9 @@ export function MaterialsView({
                           <input
                             type="number"
                             step="0.5"
-                            defaultValue={mat.wastagePercentage || 0}
+                            value={current.wastagePercentage ?? ""}
                             onWheel={(e) => e.currentTarget.blur()}
-                            onBlur={(e) => updateMaterialField(mat.id, "wastagePercentage", Number(e.target.value))}
+                            onChange={(e) => updateFabricField(mat.id, "wastagePercentage", e.target.value === "" ? 0 : Number(e.target.value))}
                             className="w-full bg-stone-950 border border-stone-800 rounded-lg p-1.5 text-xs font-mono text-red-400 text-right focus:outline-none focus:border-orange-500"
                           />
                         </td>
@@ -239,16 +247,38 @@ export function MaterialsView({
                           </span>
                         </td>
                         <td className="py-2.5 px-3 font-mono text-[10px] text-stone-400">
-                          {mat.retailMargin ? `${mat.retailMargin}% / ${mat.wholesaleMargin}%` : `Global (${defaultRetail}/${defaultWholesale})`}
+                          {current.retailMargin ? `${current.retailMargin}% / ${current.wholesaleMargin}%` : `Global (${defaultRetail}/${defaultWholesale})`}
                         </td>
-                        <td className="py-2.5 px-3 text-center">
-                          <button
-                            type="button"
-                            onClick={() => removeMaterial(mat.id)}
-                            className="text-stone-600 hover:text-red-400 p-1 transition-colors"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
+                        <td className="py-2.5 px-3 w-16 text-center">
+                          {isDirty ? (
+                            <div className="flex items-center justify-center gap-1">
+                              <button
+                                type="button"
+                                onClick={() => handleSaveFabricRow(mat.id)}
+                                className="p-1 text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10 rounded-lg transition-colors cursor-pointer"
+                                title="Confirmar cambios"
+                              >
+                                <Check className="w-4 h-4" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleCancelFabricRow(mat.id)}
+                                className="p-1 text-stone-400 hover:text-white hover:bg-stone-800 rounded-lg transition-colors cursor-pointer"
+                                title="Descartar cambios"
+                              >
+                                <X className="w-4 h-4" />
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => removeMaterial(mat.id)}
+                              className="p-1 text-stone-600 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors cursor-pointer"
+                              title="Eliminar"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          )}
                         </td>
                       </tr>
                     );
@@ -307,24 +337,26 @@ export function MaterialsView({
                 </thead>
                 <tbody className="divide-y divide-stone-800/60">
                   {supplies.map((mat) => {
-                    const totalUnitBase = (Number(mat.pricePerUnit) || 0) + (Number(mat.extraCosts) || 0);
-                    const baseUnitCost = convertUnitCost(totalUnitBase, mat.unit, mat.batchSize);
-                    const effectiveUnitCost = baseUnitCost * (1 + (Number(mat.wastagePercentage) || 0) / 100);
+                    const isDirty = Boolean(draftSupplyRows[mat.id]);
+                    const current = draftSupplyRows[mat.id] ? { ...mat, ...draftSupplyRows[mat.id] } : mat;
+                    const totalUnitBase = (Number(current.pricePerUnit) || 0) + (Number(current.extraCosts) || 0);
+                    const baseUnitCost = convertUnitCost(totalUnitBase, current.unit, current.batchSize);
+                    const effectiveUnitCost = baseUnitCost * (1 + (Number(current.wastagePercentage) || 0) / 100);
 
                     return (
-                      <tr key={mat.id} className="hover:bg-stone-800/30 transition-colors group">
+                      <tr key={mat.id} className={cn("transition-colors group", isDirty ? "bg-amber-500/5 hover:bg-amber-500/10" : "hover:bg-stone-800/30")}>
                         <td className="py-2.5 px-4">
                           <input
                             type="text"
-                            defaultValue={mat.name}
-                            onBlur={(e) => updateMaterialField(mat.id, "name", e.target.value)}
+                            value={current.name}
+                            onChange={(e) => updateSupplyField(mat.id, "name", e.target.value)}
                             className="bg-transparent text-white font-bold text-sm w-full border-b border-transparent hover:border-stone-700 focus:border-orange-500 focus:outline-none"
                           />
                         </td>
                         <td className="py-2.5 px-3">
                           <select
-                            value={mat.unit}
-                            onChange={(e) => isUnit(e.target.value) && updateMaterialField(mat.id, "unit", e.target.value as Unit)}
+                            value={current.unit}
+                            onChange={(e) => isUnit(e.target.value) && updateSupplyField(mat.id, "unit", e.target.value as Unit)}
                             className="w-full bg-stone-950 border border-stone-800 rounded-lg p-1.5 text-xs font-mono text-orange-400 focus:outline-none"
                           >
                             <option value="unit">Unidad</option>
@@ -332,6 +364,7 @@ export function MaterialsView({
                             <option value="dozen">Docena (12u)</option>
                             <option value="spool">Cono</option>
                             <option value="m">Metro</option>
+                            <option value="pie">Pie</option>
                             <option value="service">Servicio</option>
                             <option value="batch">Lote / Bloque</option>
                           </select>
@@ -340,9 +373,9 @@ export function MaterialsView({
                           <input
                             type="number"
                             step="0.01"
-                            defaultValue={mat.pricePerUnit || 0}
+                            value={current.pricePerUnit === 0 && !draftSupplyRows[mat.id] ? 0 : current.pricePerUnit ?? ""}
                             onWheel={(e) => e.currentTarget.blur()}
-                            onBlur={(e) => updateMaterialField(mat.id, "pricePerUnit", Number(e.target.value))}
+                            onChange={(e) => updateSupplyField(mat.id, "pricePerUnit", e.target.value === "" ? 0 : Number(e.target.value))}
                             className="w-full bg-stone-950 border border-stone-800 rounded-lg p-1.5 text-xs font-mono text-amber-400 text-right focus:outline-none"
                           />
                         </td>
@@ -351,7 +384,7 @@ export function MaterialsView({
                             type="number"
                             min="0"
                             step="0.01"
-                            value={mat.extraCosts ?? ""}
+                            value={current.extraCosts ?? ""}
                             placeholder="0.00"
                             onWheel={(e) => e.currentTarget.blur()}
                             onChange={(e) => {
@@ -365,9 +398,9 @@ export function MaterialsView({
                           <input
                             type="number"
                             step="0.5"
-                            defaultValue={mat.wastagePercentage || 0}
+                            value={current.wastagePercentage ?? ""}
                             onWheel={(e) => e.currentTarget.blur()}
-                            onBlur={(e) => updateMaterialField(mat.id, "wastagePercentage", Number(e.target.value))}
+                            onChange={(e) => updateSupplyField(mat.id, "wastagePercentage", e.target.value === "" ? 0 : Number(e.target.value))}
                             className="w-full bg-stone-950 border border-stone-800 rounded-lg p-1.5 text-xs font-mono text-red-400 text-right focus:outline-none"
                           />
                         </td>
@@ -375,16 +408,38 @@ export function MaterialsView({
                           Bs {effectiveUnitCost.toFixed(3)}
                         </td>
                         <td className="py-2.5 px-3 font-mono text-[10px] text-stone-400">
-                          {mat.retailMargin ? `${mat.retailMargin}% / ${mat.wholesaleMargin}%` : `Global (${defaultRetail}/${defaultWholesale})`}
+                          {current.retailMargin ? `${current.retailMargin}% / ${current.wholesaleMargin}%` : `Global (${defaultRetail}/${defaultWholesale})`}
                         </td>
-                        <td className="py-2.5 px-3 text-center">
-                          <button
-                            type="button"
-                            onClick={() => removeMaterial(mat.id)}
-                            className="text-stone-600 hover:text-red-400 p-1 transition-colors"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
+                        <td className="py-2.5 px-3 w-16 text-center">
+                          {isDirty ? (
+                            <div className="flex items-center justify-center gap-1">
+                              <button
+                                type="button"
+                                onClick={() => handleSaveSupplyRow(mat.id)}
+                                className="p-1 text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10 rounded-lg transition-colors cursor-pointer"
+                                title="Confirmar cambios"
+                              >
+                                <Check className="w-4 h-4" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleCancelSupplyRow(mat.id)}
+                                className="p-1 text-stone-400 hover:text-white hover:bg-stone-800 rounded-lg transition-colors cursor-pointer"
+                                title="Descartar cambios"
+                              >
+                                <X className="w-4 h-4" />
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => removeMaterial(mat.id)}
+                              className="p-1 text-stone-600 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors cursor-pointer"
+                              title="Eliminar"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          )}
                         </td>
                       </tr>
                     );

@@ -8,7 +8,7 @@ export interface AccessoriesViewProps {
   onNotify?: (text: string, type: "success" | "error" | "info") => void;
 }
 
-const VALID_UNITS: readonly Unit[] = ["unit", "m", "100pack", "dozen", "spool", "service", "batch"];
+const VALID_UNITS: readonly Unit[] = ["unit", "m", "100pack", "dozen", "spool", "service", "batch", "pie"];
 
 export function AccessoriesView({ config, onChange, onNotify }: AccessoriesViewProps) {
   const [drafts, setDrafts] = useState<Record<string, Material>>({});

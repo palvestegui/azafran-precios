@@ -1,4 +1,4 @@
-export type Unit = 'm' | '100pack' | 'dozen' | 'unit' | 'spool' | 'service' | 'batch';
+export type Unit = 'm' | '100pack' | 'dozen' | 'unit' | 'spool' | 'service' | 'batch' | 'pie';
 export type PaymentPeriod = 'weekly' | 'fortnightly' | 'monthly' | 'bimonthly' | 'quarterly' | 'semiannually' | 'yearly';
 
 export interface ProductIngredient {

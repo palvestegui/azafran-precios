@@ -1,13 +1,44 @@
 import React, { useState, useEffect } from "react";
 import { Trash2 } from "lucide-react";
-import { GlobalConfig, Product, Material } from "../../types";
+import { GlobalConfig, Product, Material, Unit } from "../../types";
+import { getMaterialCost } from "../../utils/calculations";
 
 interface IngredientQuantityInputProps {
   value: number;
   onChange: (val: number) => void;
+  step?: string;
+  min?: string;
+  placeholder?: string;
 }
 
-function IngredientQuantityInput({ value, onChange }: IngredientQuantityInputProps) {
+function getRecipeUnitLabel(unit: Unit): string {
+  switch (unit) {
+    case "100pack":
+    case "dozen":
+    case "unit":
+      return "unid.";
+    case "spool":
+      return "cono";
+    case "m":
+      return "m";
+    case "pie":
+      return "pie";
+    case "batch":
+      return "lote";
+    case "service":
+      return "serv.";
+    default:
+      return unit;
+  }
+}
+
+function IngredientQuantityInput({
+  value,
+  onChange,
+  step = "any",
+  min = "0",
+  placeholder,
+}: IngredientQuantityInputProps) {
   const [text, setText] = useState<string>(() =>
     value !== undefined && value !== null ? String(value) : ""
   );
@@ -44,8 +75,9 @@ function IngredientQuantityInput({ value, onChange }: IngredientQuantityInputPro
   return (
     <input
       type="number"
-      min="0"
-      step="any"
+      min={min}
+      step={step}
+      placeholder={placeholder}
       className="w-16 bg-stone-900 border border-stone-700 rounded px-1.5 py-1 text-white focus:border-amber-500 outline-none text-center font-mono text-xs"
       value={text}
       onChange={handleChange}
@@ -115,7 +147,8 @@ export function ProductIngredientsTable({
             {draftProduct.ingredients.map((ing) => {
               const mat = config.materials.find((m) => m.id === ing.materialId);
               if (!mat) return null;
-              const cost = (mat.pricePerUnit + (mat.extraCosts || 0)) * ing.quantity;
+              const cost = getMaterialCost(mat, ing.quantity, config.materials);
+              const isDiscretePack = mat.unit === "100pack" || mat.unit === "dozen";
               return (
                 <tr key={ing.materialId} className="hover:bg-stone-800/30">
                   <td
@@ -128,12 +161,15 @@ export function ProductIngredientsTable({
                     <IngredientQuantityInput
                       value={ing.quantity}
                       onChange={(q) => onUpdateIngredient(mat.id, q)}
+                      step={isDiscretePack ? "1" : "0.01"}
+                      min={isDiscretePack ? "1" : "0"}
+                      placeholder={isDiscretePack ? "Cant. piezas (ej. 4)" : "0.00"}
                     />
                   </td>
-                  <td className="px-2 py-2 w-12 text-center text-stone-500 font-mono text-[11px] truncate">
-                    {mat.unit}
+                  <td className="px-2 py-2 w-12 text-center text-stone-400 font-mono text-[11px] truncate">
+                    {getRecipeUnitLabel(mat.unit)}
                   </td>
-                  <td className="px-2 py-2 w-20 text-right font-mono text-amber-500/80 whitespace-nowrap text-xs">
+                  <td className="px-2 py-2 w-20 text-right font-mono text-amber-500/80 whitespace-nowrap text-xs font-bold">
                     Bs {cost.toFixed(2)}
                   </td>
                   <td className="px-1 py-2 w-8 text-center">

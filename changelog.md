@@ -2,6 +2,34 @@
 
 ## [Unreleased] - 2026-09-26
 
+### Row-Level Dirty State, Unit of Measure 'pie', and Discrete Recipe Counting (`MaterialsView.tsx`, `types.ts`, `conversions.ts`, `validation.ts`, `ProductIngredientsTable.tsx`, `ProductCard.tsx`)
+- **Objective & Architectural Decision**:
+  - **Row-Level Confirm (`✓`) & Discard (`✕`) (`MaterialsView.tsx`)**:
+    - Introduced local draft states `draftSupplyRows` and `draftFabricRows` in `MaterialsView.tsx`.
+    - Editing row inputs no longer immediately mutates the global catalog; changes stay contained in the row draft.
+    - Confirming (`handleSaveSupplyRow` / `handleSaveFabricRow`) commits the row into `config.materials`, executes `saveMaterial(updated)`, and clears the dirty draft.
+    - Discarding (`handleCancelSupplyRow` / `handleCancelFabricRow`) purges the row draft and reverts inputs and calculations immediately.
+    - Rendered `Check`, `X`, and `Trash2` action buttons matching `AccessoriesView.tsx`.
+  - **Unit of Measure `'pie'` (Foot)**:
+    - Extended `Unit` in `src/types.ts` with `'pie'`.
+    - Updated `src/utils/conversions.ts` with `case "pie": return 1;`.
+    - Added `'pie'` to `VALID_UNITS` in `src/utils/validation.ts` and `AccessoriesView.tsx`.
+    - Added `<option value="pie">Pie</option>` to Insumos unit selector dropdown in `MaterialsView.tsx`.
+  - **Discrete Piece Counting in Recipes (`ProductIngredientsTable.tsx`, `ProductCard.tsx`)**:
+    - Routed recipe ingredient costs through `getMaterialCost(mat, ing.quantity, config.materials)`.
+    - Packaged bulk materials (`100pack`, `dozen`) now correctly evaluate piece costs: $((\text{pricePerUnit} + \text{extraCosts}) / 100) \times \text{cant}$ and $((\text{pricePerUnit} + \text{extraCosts}) / 12) \times \text{cant}$ with wastage, enabling integer counting (e.g. 4 rivets, 2 buckles).
+    - Added discrete input constraints (`step="1"`, `min="1"`, placeholder `"Cant. piezas (ej. 4)"`) for `100pack` and `dozen`, and continuous decimal constraints (`step="0.01"`, placeholder `"0.00"`) for `spool`, `m`, and `pie`.
+    - Mapped recipe display units (`UNID.` column): `100pack`, `dozen`, `unit` $\rightarrow$ `unid.`; `spool` $\rightarrow$ `cono`; `m` $\rightarrow$ `m`; `pie` $\rightarrow$ `pie`; `batch` $\rightarrow$ `lote`; `service` $\rightarrow$ `serv.`.
+- **Rule 300/500 & Strict Type Safety**:
+  - `src/types.ts`: 112 lines (< 300 limit).
+  - `src/utils/conversions.ts`: 97 lines (< 300 limit).
+  - `src/utils/validation.ts`: 299 lines (< 300 limit).
+  - `src/components/views/MaterialsView.tsx`: 464 lines (< 500 limit).
+  - `src/components/products/ProductIngredientsTable.tsx`: 199 lines (< 500 limit).
+  - `src/components/products/ProductCard.tsx`: 433 lines (< 500 limit).
+  - Explicit typing with zero `any` or `@ts-ignore`.
+  - Verified with `lint_applet` (`tsc --noEmit`) and production `compile_applet`.
+
 ### Extra Logística Column in Insumos and Telas Tables (`MaterialsView.tsx`)
 - **Objective & Architectural Decision**:
   - Added the "Extra Logística" (`extraCosts`) numeric input column to both the "Telas" (Fabrics) and "Insumos" (Supplies) tables in `MaterialsView.tsx`, matching the existing implementation and styling of the "Accesorios" table:

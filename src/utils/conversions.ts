@@ -12,6 +12,8 @@ export function getUnitMultiplier(unit: Unit): number {
       return 1 / 12;
     case "100pack":
       return 1 / 100;
+    case "pie":
+      return 1;
     default:
       return 1;
   }

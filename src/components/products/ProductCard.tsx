@@ -329,9 +329,11 @@ export function ProductCard({
                         )
                           qtyLabel = "Unidades";
                         else if (mat.unit === "m") qtyLabel = "Metros";
+                        else if (mat.unit === "pie") qtyLabel = "Pies";
                         else if (mat.unit === "spool") qtyLabel = "Conos";
                         else if (mat.unit === "service") qtyLabel = "Cant.";
                       }
+                      const isDiscrete = mat?.unit === "100pack" || mat?.unit === "dozen";
                       return (
                         <div
                           key={i}
@@ -370,8 +372,9 @@ export function ProductCard({
                             </label>
                             <input
                               type="number"
-                              step="any"
-                              min="0"
+                              step={isDiscrete ? "1" : "0.01"}
+                              min={isDiscrete ? "1" : "0"}
+                              placeholder={isDiscrete ? "Cant. piezas (ej. 4)" : "0.00"}
                               value={ing.quantity}
                               onWheel={(e) => e.currentTarget.blur()}
                               onChange={(e) =>
