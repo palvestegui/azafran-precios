@@ -111,6 +111,9 @@ export function MaterialsView({
     saveMaterial({ ...target, [field]: value });
   };
 
+  const updateFabricField = updateMaterialField;
+  const updateSupplyField = updateMaterialField;
+
   const defaultRetail = config.profitMargin || DEFAULT_RETAIL_MARGIN;
   const defaultWholesale = config.wholesaleMargin || DEFAULT_WHOLESALE_MARGIN;
 
@@ -173,6 +176,7 @@ export function MaterialsView({
                     <th className="py-3 px-4">Tela</th>
                     <th className="py-3 px-3 w-28">Unidad</th>
                     <th className="py-3 px-3 w-32">Costo / Metro (Bs)</th>
+                    <th className="py-3 px-3 w-28">Extra Logística</th>
                     <th className="py-3 px-3 w-24">Merma (%)</th>
                     <th className="py-3 px-4 w-44">Costo Real / Metro</th>
                     <th className="py-3 px-3 w-32">Margen</th>
@@ -181,7 +185,8 @@ export function MaterialsView({
                 </thead>
                 <tbody className="divide-y divide-stone-800/60">
                   {fabrics.map((mat) => {
-                    const effective = (mat.pricePerUnit || 0) * (1 + (mat.wastagePercentage || 0) / 100);
+                    const baseMetroCost = (Number(mat.pricePerUnit) || 0) + (Number(mat.extraCosts) || 0);
+                    const realMetroCost = baseMetroCost * (1 + (Number(mat.wastagePercentage) || 0) / 100);
                     return (
                       <tr key={mat.id} className="hover:bg-stone-800/30 transition-colors group">
                         <td className="py-2.5 px-4">
@@ -206,6 +211,21 @@ export function MaterialsView({
                         <td className="py-2.5 px-3">
                           <input
                             type="number"
+                            min="0"
+                            step="0.01"
+                            value={mat.extraCosts ?? ""}
+                            placeholder="0.00"
+                            onWheel={(e) => e.currentTarget.blur()}
+                            onChange={(e) => {
+                              const val = e.target.value.trim();
+                              updateFabricField(mat.id, "extraCosts", val === "" ? 0 : Number(val));
+                            }}
+                            className="w-full bg-stone-950 border border-stone-800 rounded-lg p-1.5 text-xs font-mono text-stone-300 focus:outline-none focus:border-orange-500 text-right"
+                          />
+                        </td>
+                        <td className="py-2.5 px-3">
+                          <input
+                            type="number"
                             step="0.5"
                             defaultValue={mat.wastagePercentage || 0}
                             onWheel={(e) => e.currentTarget.blur()}
@@ -215,9 +235,8 @@ export function MaterialsView({
                         </td>
                         <td className="py-2.5 px-4 font-mono">
                           <span className="text-sm font-bold text-amber-400">
-                            Bs {effective.toFixed(2)}
+                            Bs {realMetroCost.toFixed(2)} / m
                           </span>
-                          <span className="text-[10px] text-stone-500 ml-1">/ m</span>
                         </td>
                         <td className="py-2.5 px-3 font-mono text-[10px] text-stone-400">
                           {mat.retailMargin ? `${mat.retailMargin}% / ${mat.wholesaleMargin}%` : `Global (${defaultRetail}/${defaultWholesale})`}
@@ -279,6 +298,7 @@ export function MaterialsView({
                     <th className="py-3 px-4">Insumo</th>
                     <th className="py-3 px-3 w-36">Presentación / Unidad</th>
                     <th className="py-3 px-3 w-32">Costo Compra (Bs)</th>
+                    <th className="py-3 px-3 w-28">Extra Logística</th>
                     <th className="py-3 px-3 w-24">Merma (%)</th>
                     <th className="py-3 px-4 w-44">Costo Efectivo / Unidad</th>
                     <th className="py-3 px-3 w-32">Margen</th>
@@ -287,8 +307,9 @@ export function MaterialsView({
                 </thead>
                 <tbody className="divide-y divide-stone-800/60">
                   {supplies.map((mat) => {
-                    const baseCost = convertUnitCost(mat.pricePerUnit || 0, mat.unit, mat.batchSize);
-                    const effective = baseCost * (1 + (mat.wastagePercentage || 0) / 100);
+                    const totalUnitBase = (Number(mat.pricePerUnit) || 0) + (Number(mat.extraCosts) || 0);
+                    const baseUnitCost = convertUnitCost(totalUnitBase, mat.unit, mat.batchSize);
+                    const effectiveUnitCost = baseUnitCost * (1 + (Number(mat.wastagePercentage) || 0) / 100);
 
                     return (
                       <tr key={mat.id} className="hover:bg-stone-800/30 transition-colors group">
@@ -328,6 +349,21 @@ export function MaterialsView({
                         <td className="py-2.5 px-3">
                           <input
                             type="number"
+                            min="0"
+                            step="0.01"
+                            value={mat.extraCosts ?? ""}
+                            placeholder="0.00"
+                            onWheel={(e) => e.currentTarget.blur()}
+                            onChange={(e) => {
+                              const val = e.target.value.trim();
+                              updateSupplyField(mat.id, "extraCosts", val === "" ? 0 : Number(val));
+                            }}
+                            className="w-full bg-stone-950 border border-stone-800 rounded-lg p-1.5 text-xs font-mono text-stone-300 focus:outline-none focus:border-orange-500 text-right"
+                          />
+                        </td>
+                        <td className="py-2.5 px-3">
+                          <input
+                            type="number"
                             step="0.5"
                             defaultValue={mat.wastagePercentage || 0}
                             onWheel={(e) => e.currentTarget.blur()}
@@ -336,7 +372,7 @@ export function MaterialsView({
                           />
                         </td>
                         <td className="py-2.5 px-4 font-mono font-bold text-amber-400 text-sm">
-                          Bs {effective.toFixed(3)}
+                          Bs {effectiveUnitCost.toFixed(3)}
                         </td>
                         <td className="py-2.5 px-3 font-mono text-[10px] text-stone-400">
                           {mat.retailMargin ? `${mat.retailMargin}% / ${mat.wholesaleMargin}%` : `Global (${defaultRetail}/${defaultWholesale})`}

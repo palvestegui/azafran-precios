@@ -1,5 +1,18 @@
 # Changelog
 
+## [Unreleased] - 2026-09-26
+
+### Extra Logística Column in Insumos and Telas Tables (`MaterialsView.tsx`)
+- **Objective & Architectural Decision**:
+  - Added the "Extra Logística" (`extraCosts`) numeric input column to both the "Telas" (Fabrics) and "Insumos" (Supplies) tables in `MaterialsView.tsx`, matching the existing implementation and styling of the "Accesorios" table:
+    1. **Telas Table**: Added `<th className="py-3 px-3 w-28">Extra Logística</th>` between "Costo / Metro (Bs)" and "Merma (%)". Row renders a numeric input for `mat.extraCosts` with `onWheel` blur and calls `updateFabricField(mat.id, "extraCosts", ...)`. Recalculates `baseMetroCost = (Number(mat.pricePerUnit) || 0) + (Number(mat.extraCosts) || 0)` and `realMetroCost = baseMetroCost * (1 + (Number(mat.wastagePercentage) || 0) / 100)` rendered as `Bs {realMetroCost.toFixed(2)} / m`.
+    2. **Insumos Table**: Added `<th className="py-3 px-3 w-28">Extra Logística</th>` between "Costo Compra (Bs)" and "Merma (%)". Row renders a numeric input for `mat.extraCosts` calling `updateSupplyField(mat.id, "extraCosts", ...)`. Recalculates `totalUnitBase = (Number(mat.pricePerUnit) || 0) + (Number(mat.extraCosts) || 0)`, `baseUnitCost = convertUnitCost(totalUnitBase, mat.unit, mat.batchSize)`, and `effectiveUnitCost = baseUnitCost * (1 + (Number(mat.wastagePercentage) || 0) / 100)` rendered as `Bs {effectiveUnitCost.toFixed(3)}`.
+  - Confirmed `calculations.ts` (`getMaterialTrueCostPerUnit`), `pricingCalculator.ts`, `pricingMatrix.ts`, `marginSentinel.ts`, and `validation.ts` already seamlessly integrate and preserve `mat.extraCosts`.
+- **Rule 300/500 & Strict Type Safety**:
+  - `MaterialsView.tsx` maintained at 409 lines (strictly < 500 lines limit).
+  - Explicit typing with zero `any` or `@ts-ignore`.
+  - Verified with `lint_applet` (`tsc --noEmit`) and production `compile_applet`.
+
 ## [Unreleased] - 2026-09-25
 
 ### Unified Single-Click Save & Two-Phase Commit in Workshop Builder (`ProductsView.tsx`)
