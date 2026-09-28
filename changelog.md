@@ -1,5 +1,59 @@
 # Changelog
 
+## [Unreleased] - 2026-09-27
+
+### Deterministic Name-Agnostic Ventas Publisher with Strict Allowed Fabrics and Tela Principal Flag (`ventasPublisher.ts`)
+- **Objective & Architectural Update**:
+  - Replaced `src/utils/ventasPublisher.ts` with a strictly name-agnostic, ID-driven schema for Ventas snapshot publishing.
+  - **Strict Fabric Scoping**:
+    - Only evaluates fabrics explicitly listed in `prod.allowedFabricIds` (preventing phantom or unapproved fabric variants from leaking into Ventas).
+    - Primary fabric resolution is strictly anchored to `prod.defaultFabricId`, with graceful fallback to the first fabric.
+  - **Tela Principal (`isPrimary`) Flagging**:
+    - Both `garments` (base patterns) and `catalogGarments` (collection items) now stamp `isPrimary: boolean` on each fabric variant (`fabric.id === prod.defaultFabricId`).
+  - **Catalog Payload Reshaping**:
+    - `catalogGarments` transformed into a dictionary keyed by `prod.name` containing `defaultFabricName`, `priceRaleo`, `priceB2B`, and `fabricVariants`.
+  - **Non-Destructive Atomic Sync**:
+    - Preserved non-destructive `{ merge: true }` write to Ventas `pricing/global` document.
+- **Rule 300 & Type Safety**:
+  - `src/utils/ventasPublisher.ts`: 126 lines (< 300 limit).
+  - Strict TypeScript with zero `any` and zero `@ts-ignore`. Verified via `tsc --noEmit` and Vite build.
+
+### Fix: In-Button Two-Step Confirmation for Ventas Publishing (`PricingMatrixView.tsx`, `PricingMatrixTable.tsx`)
+- **Bug Fix**:
+  - Replaced browser `window.confirm()` which is blocked inside the AI Studio sandboxed iframe environment and violates the zero-native-dialogs constraint.
+- **Architectural Update**:
+  - Implemented an elegant, non-intrusive two-step in-button confirmation state (`confirmStep`):
+    - First click: Button transitions to amber pulse state with `AlertTriangle` icon and "¿Confirmar publicación?" prompt.
+    - Second click within 4 seconds: Executes atomic `POST /api/sync-to-ventas` publish flow with `Loader2` spinner.
+    - Timeout of 4 seconds of inactivity automatically resets `confirmStep` to prevent accidental triggers.
+  - Implemented rich feedback banner above the KPI deck displaying success (`CheckCircle2` on emerald) or failure (`AlertTriangle` on red) with 6-second auto-dismiss.
+  - Purged all occurrences of `window.confirm` and `window.alert` across the entire codebase.
+- **Line Count & Strict Types**:
+  - `PricingMatrixView.tsx`: 136 lines (< 300 limit).
+  - `PricingMatrixTable.tsx`: 434 lines (< 500 limit).
+  - Strict TypeScript with zero `any` or `@ts-ignore`. Verified with `tsc --noEmit` and build.
+
+### One-Click Deterministic Snapshot Publishing to Ventas (`ventasPublisher.ts`, `server.ts`, `PricingMatrixView.tsx`, `PricingMatrixTable.tsx`)
+- **Objective & Architectural Decision**:
+  - **Publishing Engine (`src/utils/ventasPublisher.ts`)**:
+    - Built pure mathematical pricing calculation and atomic `{ merge: true }` snapshot publishing to Ventas Firestore (`pricing/global`).
+    - Segregates garments into `garments` (multi-fabric base patterns) and `catalogGarments` (collection products with variant ladders and default fabric resolution).
+    - Respects variant price overrides (`customRetailPrice`, `customWholesalePrice`, `retailPrice`, `wholesalePrice`) and applies deterministic `roundBob` rounding.
+    - Includes fallback handling to ensure high availability across environments.
+  - **API & MCP Unification (`server.ts`)**:
+    - Added `POST /api/sync-to-ventas` route.
+    - Unified the `precios_sync_to_ventas` MCP tool and HTTP route to call `publishPreciosToVentas(dbLocal, dbVentas, fallback)`, consolidating logic and eliminating ~70 lines of legacy duplicated code.
+  - **One-Click UI Trigger (`PricingMatrixView.tsx` & `PricingMatrixTable.tsx`)**:
+    - Added "Publicar en Ventas" action button with `UploadCloud` and `Loader2` spinning indicator.
+    - Added confirmation dialog, async submission handling, and visual feedback banner above KPI cards.
+- **Rule 300 / Rule 500 Compliance**:
+  - `src/utils/ventasPublisher.ts`: 128 lines (< 300 lines limit).
+  - `server.ts`: 205 lines (< 300 lines limit).
+  - `PricingMatrixView.tsx`: 56 lines (< 500 lines limit).
+  - `PricingMatrixTable.tsx`: 425 lines (< 500 lines limit).
+  - Zero `any` or `@ts-ignore` across all modified files.
+  - Verified with `tsc --noEmit` and full production build.
+
 ## [Unreleased] - 2026-09-26
 
 ### Row-Level Dirty State, Unit of Measure 'pie', and Discrete Recipe Counting (`MaterialsView.tsx`, `types.ts`, `conversions.ts`, `validation.ts`, `ProductIngredientsTable.tsx`, `ProductCard.tsx`)

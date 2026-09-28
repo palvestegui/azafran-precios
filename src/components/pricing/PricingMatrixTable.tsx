@@ -17,7 +17,8 @@ import {
   Store,
   Info,
   CheckCircle2,
-  RefreshCw,
+  UploadCloud,
+  Loader2,
 } from "lucide-react";
 
 interface PricingMatrixTableProps {
@@ -26,6 +27,11 @@ interface PricingMatrixTableProps {
   config: GlobalConfig;
   mode?: MatrixViewMode;
   onUpdateProductMeters?: (productId: string, newMeters: number) => void;
+  onPublishToVentas?: () => Promise<void>;
+  isPublishing?: boolean;
+  publishMessage?: string | null;
+  publishAction?: React.ReactNode;
+  publishBanner?: React.ReactNode;
 }
 
 export const PricingMatrixTable: React.FC<PricingMatrixTableProps> = ({
@@ -34,6 +40,11 @@ export const PricingMatrixTable: React.FC<PricingMatrixTableProps> = ({
   config,
   mode: initialMode = "combined",
   onUpdateProductMeters,
+  onPublishToVentas,
+  isPublishing: externalIsPublishing,
+  publishMessage: externalPublishMessage,
+  publishAction,
+  publishBanner,
 }) => {
   const [selectedProdId, setSelectedProdId] = useState<string>(products[0]?.id || "");
   const [searchQuery, setSearchQuery] = useState<string>("");
@@ -42,8 +53,11 @@ export const PricingMatrixTable: React.FC<PricingMatrixTableProps> = ({
   const [currentMode, setCurrentMode] = useState<MatrixViewMode>(initialMode);
   const [showFormulas, setShowFormulas] = useState<boolean>(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
-  const [isSyncing, setIsSyncing] = useState<boolean>(false);
-  const [syncFeedback, setSyncFeedback] = useState<{ type: "success" | "error"; message: string } | null>(null);
+  const [internalPublishing, setInternalPublishing] = useState<boolean>(false);
+  const [internalPublishMessage, setInternalPublishMessage] = useState<string | null>(null);
+
+  const isPublishing = externalIsPublishing !== undefined ? externalIsPublishing : internalPublishing;
+  const publishMessage = externalPublishMessage !== undefined ? externalPublishMessage : internalPublishMessage;
 
   const fabricList = useMemo(() => fabrics.filter((m) => m.category === "fabric"), [fabrics]);
 
@@ -92,54 +106,26 @@ export const PricingMatrixTable: React.FC<PricingMatrixTableProps> = ({
     } catch { /* ignore */ }
   };
 
-  const handleSyncToVentas = async () => {
-    setIsSyncing(true);
-    setSyncFeedback(null);
+  const handlePublishToVentas = async () => {
+    if (onPublishToVentas) {
+      await onPublishToVentas();
+      return;
+    }
+    setInternalPublishing(true);
     try {
-      const res = await fetch("/mcp", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          jsonrpc: "2.0",
-          id: Date.now(),
-          method: "tools/call",
-          params: {
-            name: "precios_sync_to_ventas",
-            arguments: {},
-          },
-        }),
-      });
-
-      const data = (await res.json()) as {
-        result?: { content?: Array<{ type: string; text?: string }> };
-        error?: { message?: string };
-      };
-
-      if (data.result && !data.error) {
-        const textContent = data.result.content?.[0]?.text;
-        let parsed: { success?: boolean; error?: string; message?: string } = {};
-        if (textContent) {
-          try {
-            parsed = JSON.parse(textContent) as { success?: boolean; error?: string; message?: string };
-          } catch {
-            /* ignore */
-          }
-        }
-
-        if (parsed.success === false) {
-          setSyncFeedback({ type: "error", message: parsed.error || "Error al sincronizar con Ventas." });
-        } else {
-          setSyncFeedback({ type: "success", message: "¡Catálogo y precios publicados exitosamente a Ventas!" });
-        }
+      const res = await fetch("/api/sync-to-ventas", { method: "POST" });
+      const data = await res.json();
+      if (data.success) {
+        setInternalPublishMessage(`Sincronización exitosa: ${data.baseCount} base, ${data.catalogCount} catálogo.`);
       } else {
-        setSyncFeedback({ type: "error", message: data.error?.message || "Error al conectar con el servidor." });
+        setInternalPublishMessage(`Error: ${data.error}`);
       }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
-      setSyncFeedback({ type: "error", message: `Fallo de red: ${msg}` });
+      setInternalPublishMessage(`Error de conexión: ${msg}`);
     } finally {
-      setIsSyncing(false);
-      setTimeout(() => setSyncFeedback(null), 4500);
+      setInternalPublishing(false);
+      setTimeout(() => setInternalPublishMessage(null), 5000);
     }
   };
 
@@ -205,26 +191,32 @@ export const PricingMatrixTable: React.FC<PricingMatrixTableProps> = ({
             <Printer className="w-4 h-4 text-orange-400" />
           </button>
 
-          <button
-            type="button"
-            onClick={handleSyncToVentas}
-            disabled={isSyncing}
-            title="Publicar catálogo y precios directamente a Ventas (Staging)"
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 hover:bg-amber-500 hover:text-black transition-all text-xs font-mono font-bold shadow-sm active:scale-95 disabled:opacity-50 cursor-pointer"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? "animate-spin text-amber-400" : "text-amber-400"}`} />
-            <span>{isSyncing ? "Publicando..." : "Publicar a Ventas"}</span>
-          </button>
+          {publishAction ? (
+            publishAction
+          ) : (
+            <button
+              type="button"
+              onClick={handlePublishToVentas}
+              disabled={isPublishing}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-orange-600 hover:bg-orange-500 text-white transition-all text-xs font-mono font-medium shadow-sm active:scale-95 disabled:opacity-50 cursor-pointer"
+              title="Publicar catálogo y tarifas calculadas directamente a Ventas"
+            >
+              {isPublishing ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <UploadCloud className="w-3.5 h-3.5" />
+              )}
+              <span>{isPublishing ? "Publicando..." : "Publicar en Ventas"}</span>
+            </button>
+          )}
         </div>
       </div>
 
-      {syncFeedback && (
-        <div className={`fixed bottom-4 right-4 z-50 px-4 py-2.5 rounded-xl border text-xs font-mono font-bold shadow-2xl animate-in slide-in-from-bottom duration-200 ${
-          syncFeedback.type === "success"
-            ? "bg-emerald-950 border-emerald-500/50 text-emerald-200"
-            : "bg-red-950 border-red-500/50 text-red-200"
-        }`}>
-          {syncFeedback.message}
+      {publishBanner}
+
+      {!publishBanner && publishMessage && (
+        <div className="p-3 rounded-xl bg-stone-900 border border-orange-500/40 text-orange-300 text-xs font-mono animate-in fade-in">
+          {publishMessage}
         </div>
       )}
 
