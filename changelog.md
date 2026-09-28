@@ -1,5 +1,25 @@
 # Changelog
 
+## [Unreleased] - 2026-09-28
+
+### Fix: Ventas Database ID Connection, Zero-Consumption Publisher & Detailed Error Handling (`server.ts`, `ventasPublisher.ts`, `PricingMatrixView.tsx`)
+- **Ventas Database Connection ID (`server.ts`)**:
+  - Pointed `dbVentas` directly to the active Firestore database ID `ai-studio-0dba6e4d-b474-410e-b078-6e631bf1a01a` in project `mystic-return-81b2m`, resolving connection target issues.
+  - Aligned `/api/sync-to-ventas` and MCP tools to call `publishPreciosToVentas(dbLocal, dbVentas)`.
+  - Returned detailed JSON error messages `{ success: false, error: message }` on HTTP 500 status.
+- **Strict Zero-Consumption Publisher (`src/utils/ventasPublisher.ts`)**:
+  - Excluded all consumption and weight figures from the Ventas payload (`pricing/global`).
+  - Enforced strict `prod.defaultFabricId` matching for `isPrimary: true` (for the Tela Principal banner).
+  - Enforced strict `prod.allowedFabricIds` filtering to eliminate phantom variants.
+  - Maintained pure data passthrough of `prod.category`, `prod.name`, and `prod.description`.
+- **Client Error Resolution (`PricingMatrixView.tsx`)**:
+  - Updated `handlePublishClick` to parse `await res.json().catch(() => ({}))` on failure so the banner displays the actual server error message instead of an opaque HTTP status.
+- **Rule 300 / Zero Any**:
+  - `server.ts`: 201 lines (< 300 lines limit).
+  - `src/utils/ventasPublisher.ts`: 105 lines (< 300 lines limit).
+  - `src/components/views/PricingMatrixView.tsx`: 128 lines (< 300 lines limit).
+  - Zero `any` types or `@ts-ignore`. Verified with `tsc --noEmit` and production build.
+
 ## [Unreleased] - 2026-09-27
 
 ### Deterministic Name-Agnostic Ventas Publisher with Strict Allowed Fabrics and Tela Principal Flag (`ventasPublisher.ts`)

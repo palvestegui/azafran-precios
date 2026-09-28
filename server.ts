@@ -24,16 +24,16 @@ const dbLocal = getFirestore(localApp, firebaseConfig.firestoreDatabaseId || "(d
 const clientApp = initClientApp(firebaseConfig);
 const clientDb = getClientDb(clientApp, firebaseConfig.firestoreDatabaseId);
 
-// Initialize Ventas Firestore targeting Staging with Fallback to Production
-let dbVentasStaging: FirebaseFirestore.Firestore | null = null;
-let dbVentasProd: FirebaseFirestore.Firestore | null = null;
-try { dbVentasStaging = getFirestore(localApp, "ai-studio-ab4c50fd-e8ed-40a2-a91c-6782ae7f098e"); } catch (e) { console.warn("Ventas Staging init notice:", e); }
+let dbVentas: FirebaseFirestore.Firestore;
 try {
-  const appVentas = admin.initializeApp({ projectId: "mystic-return-81b2m" }, "ventas");
-  dbVentasProd = getFirestore(appVentas, "ai-studio-0dba6e4d-b474-410e-b078-6e631bf1a01a");
-} catch (err) { console.warn("Ventas Prod init notice:", err); }
-
-const dbVentas = dbVentasStaging || dbVentasProd;
+  const appVentas = admin.initializeApp(
+    { projectId: "mystic-return-81b2m" },
+    "ventas"
+  );
+  dbVentas = getFirestore(appVentas, "ai-studio-0dba6e4d-b474-410e-b078-6e631bf1a01a");
+} catch (e) {
+  console.error("Failed to initialize Ventas app:", e);
+}
 
 const mcpServer = new McpServer({ name: "ChefwearPricingMCP", version: "1.0.0" });
 
@@ -98,8 +98,7 @@ mcpServer.tool("precios_update_fabric_cost", "Updates fabric cost per meter", { 
 });
 mcpServer.tool("precios_sync_to_ventas", "Syncs rounded prices to Ventas DB", {}, async () => {
   try {
-    const fallback = await getLocalConfig();
-    const result = await publishPreciosToVentas(dbLocal, dbVentas, fallback);
+    const result = await publishPreciosToVentas(dbLocal, dbVentas);
     return { content: [{ type: "text", text: JSON.stringify({ success: true, baseCount: result.baseCount, catalogCount: result.catalogCount, lastSyncedAt: result.lastSyncedAt }) }] };
   } catch (err: unknown) {
     const errorMsg = err instanceof Error ? err.message : String(err);
@@ -158,8 +157,7 @@ async function startServer() {
           toolResult = r.message;
         } else if (toolName === "precios_sync_to_ventas") {
           try {
-            const fallback = await getLocalConfig();
-            const syncRes = await publishPreciosToVentas(dbLocal, dbVentas, fallback);
+            const syncRes = await publishPreciosToVentas(dbLocal, dbVentas);
             toolResult = { success: true, baseCount: syncRes.baseCount, catalogCount: syncRes.catalogCount, lastSyncedAt: syncRes.lastSyncedAt };
           } catch (syncErr: unknown) {
             const errorMsg = syncErr instanceof Error ? syncErr.message : String(syncErr);
@@ -180,8 +178,7 @@ async function startServer() {
 
   app.post("/api/sync-to-ventas", async (_req, res) => {
     try {
-      const fallback = await getLocalConfig();
-      const result = await publishPreciosToVentas(dbLocal, dbVentas, fallback);
+      const result = await publishPreciosToVentas(dbLocal, dbVentas);
       res.json(result);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);

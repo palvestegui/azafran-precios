@@ -3,35 +3,17 @@ import { GlobalConfig, Material } from '../types.js';
 import { calculateProductAnalysis } from './pricingCalculator.js';
 import { roundBob } from './calculations.js';
 
-export async function publishPreciosToVentas(
-  dbLocal: Firestore,
-  dbVentas: Firestore | null,
-  fallbackConfig?: GlobalConfig
-) {
+export async function publishPreciosToVentas(dbLocal: Firestore, dbVentas: Firestore) {
   if (!dbVentas) {
     throw new Error('Ventas DB is not initialized.');
   }
 
-  let config: GlobalConfig;
-  try {
-    const configDoc = await dbLocal.collection('config').doc('system-wide-config').get();
-    if (!configDoc.exists) {
-      if (fallbackConfig) {
-        config = fallbackConfig;
-      } else {
-        throw new Error('system-wide-config not found in Precios Firestore.');
-      }
-    } else {
-      config = configDoc.data() as GlobalConfig;
-    }
-  } catch (err: unknown) {
-    if (fallbackConfig) {
-      config = fallbackConfig;
-    } else {
-      throw err;
-    }
+  const configDoc = await dbLocal.collection('config').doc('system-wide-config').get();
+  if (!configDoc.exists) {
+    throw new Error('system-wide-config not found in Precios Firestore.');
   }
 
+  const config = configDoc.data() as GlobalConfig;
   const fabrics = config.materials.filter((m: Material) => m.category === 'fabric');
 
   const garmentsPayload: Record<string, Record<string, { priceRaleo: number; priceB2B: number; isPrimary: boolean }>> = {};
@@ -51,10 +33,7 @@ export async function publishPreciosToVentas(
     const category = (prod.category || '').trim();
     const isBase = category.toLowerCase().includes('base') || category.toLowerCase().includes('patrón');
 
-    // Primary fabric strictly resolved by prod.defaultFabricId
     const defaultFabric = fabrics.find((f) => f.id === prod.defaultFabricId) || fabrics[0];
-
-    // STRICT: Only calculate fabrics explicitly allowed for this product to prevent phantom variants
     const targetFabrics = prod.allowedFabricIds && prod.allowedFabricIds.length > 0
       ? fabrics.filter((f) => prod.allowedFabricIds!.includes(f.id))
       : fabrics;
@@ -64,8 +43,8 @@ export async function publishPreciosToVentas(
       for (const fabric of targetFabrics) {
         const analysis = calculateProductAnalysis(prod, config, fabric.id);
         const override = prod.variantOverrides?.[fabric.id];
-        const raleo = override?.customRetailPrice ?? override?.retailPrice ?? analysis.recommendedPrice;
-        const b2b = override?.customWholesalePrice ?? override?.wholesalePrice ?? analysis.recommendedWholesalePrice;
+        const raleo = override?.customRetailPrice ?? analysis.recommendedPrice;
+        const b2b = override?.customWholesalePrice ?? analysis.recommendedWholesalePrice;
 
         garmentsPayload[prod.name][fabric.name] = {
           priceRaleo: roundBob(raleo),
@@ -81,8 +60,8 @@ export async function publishPreciosToVentas(
       for (const fabric of targetFabrics) {
         const analysis = calculateProductAnalysis(prod, config, fabric.id);
         const override = prod.variantOverrides?.[fabric.id];
-        const raleo = roundBob(override?.customRetailPrice ?? override?.retailPrice ?? analysis.recommendedPrice);
-        const b2b = roundBob(override?.customWholesalePrice ?? override?.wholesalePrice ?? analysis.recommendedWholesalePrice);
+        const raleo = roundBob(override?.customRetailPrice ?? analysis.recommendedPrice);
+        const b2b = roundBob(override?.customWholesalePrice ?? analysis.recommendedWholesalePrice);
         const isPrimary = fabric.id === prod.defaultFabricId;
 
         if (isPrimary) {

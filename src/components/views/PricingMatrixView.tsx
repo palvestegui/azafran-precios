@@ -38,23 +38,15 @@ export const PricingMatrixView: React.FC<PricingMatrixViewProps> = ({
         method: "POST",
         headers: { "Content-Type": "application/json" },
       });
-
-      if (!res.ok) {
-        throw new Error(`Error HTTP ${res.status}: ${res.statusText}`);
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || `Error HTTP ${res.status}`);
       }
 
-      const data = await res.json();
-      if (data.success) {
-        setPublishMessage({
-          text: `Sincronización exitosa: ${data.baseCount} base, ${data.catalogCount} catálogo.`,
-          isError: false,
-        });
-      } else {
-        setPublishMessage({
-          text: `Error al publicar: ${data.error || "Respuesta fallida del servidor"}`,
-          isError: true,
-        });
-      }
+      setPublishMessage({
+        text: `Sincronización exitosa: ${data.baseCount} base, ${data.catalogCount} catálogo.`,
+        isError: false,
+      });
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       setPublishMessage({
