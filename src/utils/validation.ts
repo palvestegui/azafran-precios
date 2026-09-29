@@ -141,9 +141,23 @@ export function validateProduct(raw: unknown): Product | null {
 
   const prod: Product = { id, name, ingredients };
 
+  // Explicitly preserve category, description, and dual-view images
   if (typeof raw.category === "string") {
-    prod.category = raw.category.trim();
+    prod.category = sanitizeString(raw.category);
   }
+  if (typeof raw.description === "string") {
+    prod.description = sanitizeString(raw.description);
+  }
+  if (typeof raw.imageUrl === "string") {
+    prod.imageUrl = sanitizeString(raw.imageUrl);
+  }
+  if (typeof raw.backImageUrl === "string") {
+    prod.backImageUrl = sanitizeString(raw.backImageUrl);
+  }
+  if (typeof raw.laborCost === "number" || typeof raw.laborCost === "string") {
+    prod.laborCost = sanitizeNumber(raw.laborCost, 0);
+  }
+
   if (typeof raw.defaultFabricId === "string") {
     prod.defaultFabricId = raw.defaultFabricId;
   }
@@ -157,44 +171,21 @@ export function validateProduct(raw: unknown): Product | null {
     }
   }
   if (Array.isArray(raw.allowedFabricIds)) {
-    prod.allowedFabricIds = raw.allowedFabricIds.map((fid) => sanitizeString(fid)).filter(Boolean);
-  } else {
-    const fallbackProd = DEFAULT_GLOBAL_CONFIG.products?.find((p) => p.id === id);
-    if (fallbackProd?.allowedFabricIds && fallbackProd.allowedFabricIds.length > 0) {
-      prod.allowedFabricIds = [...fallbackProd.allowedFabricIds];
-    }
+    prod.allowedFabricIds = raw.allowedFabricIds
+      .map((fid) => sanitizeString(fid))
+      .filter(Boolean);
   }
   if (typeof raw.profitMargin === "number" || typeof raw.profitMargin === "string") {
-    const val = sanitizeNumber(raw.profitMargin, NaN);
-    if (!isNaN(val)) prod.profitMargin = val;
+    prod.profitMargin = sanitizeNumber(raw.profitMargin, 35);
   }
   if (typeof raw.wholesaleMargin === "number" || typeof raw.wholesaleMargin === "string") {
-    const val = sanitizeNumber(raw.wholesaleMargin, NaN);
-    if (!isNaN(val)) prod.wholesaleMargin = val;
+    prod.wholesaleMargin = sanitizeNumber(raw.wholesaleMargin, 20);
   }
   if (typeof raw.productionWeight === "number" || typeof raw.productionWeight === "string") {
-    const val = sanitizeNumber(raw.productionWeight, NaN);
-    if (!isNaN(val) && val > 0) prod.productionWeight = val;
+    prod.productionWeight = Math.max(0.1, sanitizeNumber(raw.productionWeight, 1.0));
   }
-  if (!prod.productionWeight || prod.productionWeight <= 0) {
-    const fallbackProd = DEFAULT_GLOBAL_CONFIG.products?.find((p) => p.id === id);
-    prod.productionWeight = fallbackProd?.productionWeight && fallbackProd.productionWeight > 0 ? fallbackProd.productionWeight : 1.0;
-  }
-
   if (isRecord(raw.variantOverrides)) {
-    const validOverrides: Record<string, VariantPriceOverride> = {};
-    for (const [fabricId, val] of Object.entries(raw.variantOverrides)) {
-      if (!isRecord(val)) continue;
-      const r = sanitizeNumber(val.customRetailPrice, -1);
-      const w = sanitizeNumber(val.customWholesalePrice, -1);
-      const entry: VariantPriceOverride = {};
-      if (r >= 0) entry.customRetailPrice = r;
-      if (w >= 0) entry.customWholesalePrice = w;
-      if (entry.customRetailPrice !== undefined || entry.customWholesalePrice !== undefined) {
-        validOverrides[sanitizeString(fabricId)] = entry;
-      }
-    }
-    if (Object.keys(validOverrides).length > 0) prod.variantOverrides = validOverrides;
+    prod.variantOverrides = raw.variantOverrides as Record<string, VariantPriceOverride>;
   }
 
   return prod;

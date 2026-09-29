@@ -2,6 +2,15 @@
 
 ## [Unreleased] - 2026-09-29
 
+### Preserve Category, Description, and Images in validateProduct Sanitizer (`validation.ts`)
+- **Product Sanitizer Whitelist (`src/utils/validation.ts`)**:
+  - Explicitly whitelisted and sanitized `category`, `description`, `imageUrl` (Frontal 9:16), `backImageUrl` (Posterior 9:16), and `laborCost` in `validateProduct`.
+  - Guarantees Firestore remote snapshots, echoes, and local normalization cycles preserve all media assets and marketing copy without stripping fields.
+  - Streamlined `allowedFabricIds` mapping and margin defaults.
+- **Rule 300/500 & Strict Type Safety**:
+  - `src/utils/validation.ts`: 289 lines (< 300 max limit for logical files).
+  - Zero `any` or `@ts-ignore` annotations.
+
 ### Strip Category & Effort Badges from Sidebar Product Cards (`ProductsView.tsx`)
 - **Clean Sidebar Product Cards (`src/components/views/ProductsView.tsx`)**:
   - Removed category tag and effort (`X`) badge completely from the left sidebar garment list.
