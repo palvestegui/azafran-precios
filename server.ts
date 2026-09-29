@@ -176,6 +176,43 @@ async function startServer() {
   app.options("/mcp", (_req, res) => res.setHeader("Access-Control-Allow-Origin", "*").setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS").setHeader("Access-Control-Allow-Headers", "Content-Type").status(204).end());
   app.get("/api/health", (_req, res) => res.json({ status: "ok" }));
 
+  app.options("/api/pricing/sync", (_req, res) => res.setHeader("Access-Control-Allow-Origin", "*").setHeader("Access-Control-Allow-Methods", "POST, OPTIONS").setHeader("Access-Control-Allow-Headers", "Content-Type").status(204).end());
+
+  app.post("/api/pricing/sync", async (req, res) => {
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    try {
+      const payload = req.body;
+      if (dbVentas && payload) {
+        await dbVentas.collection("pricing").doc("global").set(payload, { merge: true });
+      }
+      res.json({ success: true, lastSyncedAt: payload?.lastSyncedAt || Date.now() });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      res.status(500).json({ success: false, error: message });
+    }
+  });
+
+  app.post("/api/sync-proxy", async (req, res) => {
+    try {
+      const { targetUrl, payload } = req.body || {};
+      if (!targetUrl) throw new Error("targetUrl is required");
+      const cleanUrl = String(targetUrl).trim().replace(/\/$/, "");
+      const remoteRes = await fetch(`${cleanUrl}/api/pricing/sync`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const data = await remoteRes.json().catch(() => ({}));
+      if (!remoteRes.ok || !data.success) {
+        throw new Error(data.error || `Remote server returned HTTP ${remoteRes.status}`);
+      }
+      res.json(data);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      res.status(500).json({ success: false, error: message });
+    }
+  });
+
   app.post("/api/sync-to-ventas", async (_req, res) => {
     try {
       const result = await publishPreciosToVentas(dbLocal, dbVentas);

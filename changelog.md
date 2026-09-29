@@ -1,5 +1,78 @@
 # Changelog
 
+## [Unreleased] - 2026-09-29
+
+### Strip Category & Effort Badges from Sidebar Product Cards (`ProductsView.tsx`)
+- **Clean Sidebar Product Cards (`src/components/views/ProductsView.tsx`)**:
+  - Removed category tag and effort (`X`) badge completely from the left sidebar garment list.
+  - Allocated 100% of the card width to the garment name with `font-bold text-xs text-stone-100 break-words leading-snug`.
+  - Simplified card metadata to workshop specs: `{fabricsCount} TELAS • {product.fabricQuantity}M` in `text-[10px] text-stone-500 font-mono uppercase tracking-wider`.
+  - Maintained interactive states (`hover:bg-stone-900 hover:border-stone-700`, active selection border/shadow, and pending draft pulse dot).
+- **Rule 300/500 & Strict Type Safety**:
+  - `src/components/views/ProductsView.tsx`: 467 lines (< 500 max limit).
+  - Zero `any` or `@ts-ignore`.
+
+### Fix Product Sidebar Name Truncation & Widen Name Input (`ProductsView.tsx`, `ProductWorkbenchHeader.tsx`)
+- **Sidebar Card List Layout (`src/components/views/ProductsView.tsx`)**:
+  - Replaced the cramped single-line truncated row with a stacked card design (`flex flex-col gap-1.5`).
+  - Rendered full botanical names using `break-words leading-tight` so long product names (e.g., `Mandil Artesanal Quilquiña`) are completely readable without truncation.
+  - Positioned category badge and effort/fabric metrics (`{productionWeight || 0.3}x • {fabricsCount} telas • {fabricQuantity}m`) neatly beneath the name in a dedicated metadata row.
+  - Maintained the active selection styling and subtle pulsating dot indicator for pending dirty drafts.
+- **Detail Canvas Name Input Width (`src/components/products/ProductWorkbenchHeader.tsx`)**:
+  - Expanded `NOMBRE DE PRENDA` container minimum width from `min-w-[180px]` to `min-w-[280px]` (`flex-1 min-w-[280px]`).
+  - Ensures long titles with 30+ characters do not scroll or cut off inside the text field on desktop viewports.
+- **Rule 300/500 & Strict Type Safety**:
+  - `src/components/views/ProductsView.tsx`: 470 lines (< 500 max limit).
+  - `src/components/products/ProductWorkbenchHeader.tsx`: 200 lines (< 300 max limit).
+  - Zero `any` or `@ts-ignore` annotations.
+
+### Product Descriptions, 9:16 Dual-View Image Splitter (Frente/Espalda), & Sync Propagation (`types.ts`, `imageSplitter.ts`, `ProductMediaEditor.tsx`, `ProductsView.tsx`, `ventasPublisher.ts`)
+- **Product Model Updates (`src/types.ts`)**:
+  - Extended `Product` interface with `description?: string; imageUrl?: string; backImageUrl?: string; laborCost?: number;` to support rich catalog photography and marketing copy.
+- **Client-Side HTML5 Canvas Image Splitter (`src/utils/imageSplitter.ts`)**:
+  - Built pure client-side `processGarmentImage(file: File)`:
+    - Inspects natural aspect ratio: when `aspectRatio > 1.1`, identifies diptych image and splits left half as `front` and right half as `back` at strict 9:16 ratio (500x889px JPEG @ 0.85 quality).
+    - When `aspectRatio <= 1.1`, center-scales and compresses single photo to 9:16 ratio.
+    - Exported `processSingleImage(file: File)` for dedicated single-view uploads.
+- **Product Media Workbench Editor (`src/components/products/ProductMediaEditor.tsx`)**:
+  - Added multiline description input with real-time character count.
+  - Added dual diptych file upload button with automatic detection and split.
+  - Added 9:16 preview cards for `[ Vista Frontal ]` and `[ Vista Posterior ]` with hover replace/upload actions.
+  - Added "Intercambiar Vistas" button to swap front and back views with a single click.
+  - Added independent upload buttons and deletion buttons for each view.
+- **Products View Integration (`src/components/views/ProductsView.tsx`)**:
+  - Embedded `ProductMediaEditor` inside the active product workbench canvas.
+  - Preserved media and descriptions across garment duplication / cloning.
+  - Refactored selection/fallback effects to maintain 476 lines (< 500 lines limit).
+- **Ventas Sync Propagation (`src/utils/ventasPublisher.ts`)**:
+  - Updated `catalogGarmentsPayload` and `VentasSyncPayload` to propagate `description`, `imageUrl`, and `backImageUrl` into the Ventas snapshot.
+- **Rule 300/500 Compliance**:
+  - `src/types.ts`: 114 lines (< 300).
+  - `src/utils/imageSplitter.ts`: 76 lines (< 300).
+  - `src/components/products/ProductMediaEditor.tsx`: 289 lines (< 500).
+  - `src/components/views/ProductsView.tsx`: 476 lines (< 500).
+  - `src/utils/ventasPublisher.ts`: 121 lines (< 300).
+  - Zero `any` or `@ts-ignore` across all code. Verified with `tsc --noEmit` and production build.
+
+### Direct Client-Side HTTP Sync to Ventas with Saved Target URL (`ventasPublisher.ts`, `PricingMatrixView.tsx`, `server.ts`)
+- **Direct Client-Side HTTP Sync & Saved Target URL (`PricingMatrixView.tsx`)**:
+  - Added editable `ventasUrl` state persisted to `localStorage` under `azafran_target_ventas_url` (default: `https://sistema-azafran.ai.studio`).
+  - Added always-visible inline settings input field with gear icon next to the "Publicar en Ventas" button in the action bar, allowing instant URL customization.
+  - Implemented direct HTTP POST to `${cleanUrl}/api/pricing/sync` with clean JSON payload and server-side `/api/sync-proxy` fallback to guarantee reliable delivery against browser CORS constraints.
+  - Preserved two-step in-button confirmation with `Loader2` indicator and styled feedback banner for success and failure notifications.
+- **Clean Snapshot Builder (`src/utils/ventasPublisher.ts`)**:
+  - Exported `buildVentasPayload(config: GlobalConfig)` directly usable by both browser client and server.
+  - Stripped all internal consumption and metric figures from the Ventas payload.
+  - Strictly enforced `prod.allowedFabricIds` filtering to eliminate phantom variants and marked `isPrimary: true` for `prod.defaultFabricId`.
+- **Endpoints & CORS Support (`server.ts`)**:
+  - Added `/api/pricing/sync` with CORS headers (`Access-Control-Allow-Origin: *`, `OPTIONS` preflight).
+  - Added `/api/sync-proxy` route to relay sync payloads when target servers lack open CORS headers.
+- **Rule 300 / Zero Any**:
+  - `src/utils/ventasPublisher.ts`: 125 lines (< 300 limit).
+  - `src/components/views/PricingMatrixView.tsx`: 169 lines (< 300 limit).
+  - `server.ts`: 238 lines (< 300 limit).
+  - Zero `any` or `@ts-ignore` across all modified files. Verified with `tsc --noEmit` and Vite production build.
+
 ## [Unreleased] - 2026-09-28
 
 ### Fix: Ventas Database ID Connection, Zero-Consumption Publisher & Detailed Error Handling (`server.ts`, `ventasPublisher.ts`, `PricingMatrixView.tsx`)

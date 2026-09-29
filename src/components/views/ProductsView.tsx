@@ -7,6 +7,7 @@ import { DeleteProductModal } from "../products/DeleteProductModal";
 import { ProductIngredientsTable } from "../products/ProductIngredientsTable";
 import { ProductProjectedPrices } from "../products/ProductProjectedPrices";
 import { ProductWorkbenchHeader } from "../products/ProductWorkbenchHeader";
+import { ProductMediaEditor } from "../products/ProductMediaEditor";
 
 interface ProductsViewProps {
   config: GlobalConfig;
@@ -46,34 +47,19 @@ export function ProductsView({ config, onChange, onNotify }: ProductsViewProps) 
       .filter((p) => !term || (p.name || "").toLowerCase().includes(term));
   }, [config.products, searchTerm]);
 
-  // Sync draft whenever selectedProductId changes
+  // Sync draft whenever selectedProductId or products change
   useEffect(() => {
-    if (selectedProduct) {
-      const cloned = JSON.parse(JSON.stringify(selectedProduct));
-      setDraftProduct(cloned);
-      setCommittedProduct(cloned);
-    } else if (config.products.length > 0) {
-      const first = config.products[0];
-      setSelectedProductId(first.id);
-      const cloned = JSON.parse(JSON.stringify(first));
+    const target = selectedProduct || (config.products.length > 0 ? config.products[0] : null);
+    if (target) {
+      if (target.id !== selectedProductId) setSelectedProductId(target.id);
+      const cloned = JSON.parse(JSON.stringify(target));
       setDraftProduct(cloned);
       setCommittedProduct(cloned);
     } else {
       setDraftProduct(null);
       setCommittedProduct(null);
     }
-  }, [selectedProductId]);
-
-  // Keep fallback if active product gets removed from catalog
-  useEffect(() => {
-    if (selectedProductId && !config.products.some((p) => p.id === selectedProductId)) {
-      const fallback = config.products.length > 0 ? config.products[0] : null;
-      setSelectedProductId(fallback ? fallback.id : null);
-      const cloned = fallback ? JSON.parse(JSON.stringify(fallback)) : null;
-      setDraftProduct(cloned);
-      setCommittedProduct(cloned);
-    }
-  }, [config.products, selectedProductId]);
+  }, [selectedProductId, selectedProduct, config.products]);
 
   const isDirty = Boolean(
     (draftProduct &&
@@ -87,6 +73,14 @@ export function ProductsView({ config, onChange, onNotify }: ProductsViewProps) 
       ? crypto.randomUUID()
       : Math.random().toString(36).substring(2, 9);
 
+  const selectProductById = (id: string) => {
+    setSelectedProductId(id);
+    const target = config.products.find((p) => p.id === id);
+    const cloned = target ? JSON.parse(JSON.stringify(target)) : null;
+    setDraftProduct(cloned);
+    setCommittedProduct(cloned);
+  };
+
   const createNewProduct = () => {
     const newProduct: Product = {
       id: generateId(),
@@ -96,10 +90,7 @@ export function ProductsView({ config, onChange, onNotify }: ProductsViewProps) 
       fabricQuantity: 1,
     };
     onChange({ ...config, products: [newProduct, ...config.products] });
-    setSelectedProductId(newProduct.id);
-    const cloned = JSON.parse(JSON.stringify(newProduct));
-    setDraftProduct(cloned);
-    setCommittedProduct(cloned);
+    selectProductById(newProduct.id);
     setPendingCloneId(null);
     onNotify?.("Nueva prenda creada", "success");
   };
@@ -118,11 +109,7 @@ export function ProductsView({ config, onChange, onNotify }: ProductsViewProps) 
       setPendingProductId(id);
       return;
     }
-    setSelectedProductId(id);
-    const target = config.products.find((p) => p.id === id);
-    const cloned = target ? JSON.parse(JSON.stringify(target)) : null;
-    setDraftProduct(cloned);
-    setCommittedProduct(cloned);
+    selectProductById(id);
   };
 
   const handleConfirmNavigation = () => {
@@ -134,11 +121,7 @@ export function ProductsView({ config, onChange, onNotify }: ProductsViewProps) 
     if (nextId === "NEW_PRODUCT") {
       createNewProduct();
     } else {
-      setSelectedProductId(nextId);
-      const target = config.products.find((p) => p.id === nextId);
-      const cloned = target ? JSON.parse(JSON.stringify(target)) : null;
-      setDraftProduct(cloned);
-      setCommittedProduct(cloned);
+      selectProductById(nextId);
     }
   };
 
@@ -155,20 +138,17 @@ export function ProductsView({ config, onChange, onNotify }: ProductsViewProps) 
       id: clonedId,
       name: `Copia de ${activeProduct.name || "Prenda"}`,
       category: activeProduct.category,
+      description: activeProduct.description,
+      imageUrl: activeProduct.imageUrl,
+      backImageUrl: activeProduct.backImageUrl,
       productionWeight: activeProduct.productionWeight ?? 1.0,
       fabricQuantity: activeProduct.fabricQuantity ?? 1,
       defaultFabricId: activeProduct.defaultFabricId,
-      allowedFabricIds: activeProduct.allowedFabricIds
-        ? [...activeProduct.allowedFabricIds]
-        : [],
-      ingredients: activeProduct.ingredients
-        ? activeProduct.ingredients.map((i) => ({ ...i }))
-        : [],
+      allowedFabricIds: activeProduct.allowedFabricIds ? [...activeProduct.allowedFabricIds] : [],
+      ingredients: activeProduct.ingredients ? activeProduct.ingredients.map((i) => ({ ...i })) : [],
       profitMargin: activeProduct.profitMargin,
       wholesaleMargin: activeProduct.wholesaleMargin,
-      variantOverrides: activeProduct.variantOverrides
-        ? JSON.parse(JSON.stringify(activeProduct.variantOverrides))
-        : {},
+      variantOverrides: activeProduct.variantOverrides ? JSON.parse(JSON.stringify(activeProduct.variantOverrides)) : {},
     };
 
     const activeIdx = config.products.findIndex((p) => p.id === activeProduct.id);
@@ -337,41 +317,32 @@ export function ProductsView({ config, onChange, onNotify }: ProductsViewProps) 
           ) : (
             sortedAndFilteredProducts.map((p) => {
               const isSelected = p.id === selectedProductId;
-              const fabricCount = p.allowedFabricIds?.length || 0;
+              const fabricsCount = p.allowedFabricIds?.length || 0;
               return (
                 <button
                   key={p.id}
+                  type="button"
                   onClick={() => handleSelectProduct(p.id)}
-                  className={cn(
-                    "w-full text-left p-3 rounded-lg border transition-all text-sm flex items-center justify-between cursor-pointer",
+                  className={`w-full text-left p-3 rounded-xl border transition-all flex flex-col gap-1 cursor-pointer ${
                     isSelected
-                      ? "bg-amber-500/10 border-amber-500/50 text-amber-500"
-                      : "bg-stone-950 border-stone-800 text-stone-300 hover:border-stone-600"
-                  )}
+                      ? "bg-amber-500/10 border-amber-500/60 text-white shadow-md"
+                      : "bg-stone-900/40 border-stone-800 text-stone-300 hover:bg-stone-900 hover:border-stone-700"
+                  }`}
                 >
-                  <div className="truncate pr-2">
-                    <div className="font-bold truncate flex items-center gap-1.5">
-                      <span>{p.name || "Sin nombre"}</span>
-                      {isSelected && isDirty && (
-                        <span
-                          className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse shrink-0"
-                          title="Cambios pendientes"
-                        />
-                      )}
-                    </div>
-                    <div className="text-[10px] uppercase tracking-wider font-mono opacity-60 mt-1">
-                      {fabricCount} telas • {p.fabricQuantity || 0}m
-                    </div>
-                  </div>
-                  <div className="shrink-0 flex items-center gap-1.5">
-                    {p.category && (
-                      <span className="text-[9px] uppercase font-mono px-1.5 py-0.5 rounded bg-amber-500/10 border border-amber-500/20 text-amber-400 font-bold">
-                        {p.category}
-                      </span>
+                  {/* Full Garment Name taking full width without truncation */}
+                  <div className="font-bold text-xs text-stone-100 break-words leading-snug flex items-start justify-between gap-1.5">
+                    <span>{p.name || "Sin nombre"}</span>
+                    {isSelected && isDirty && (
+                      <span
+                        className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse shrink-0 mt-0.5"
+                        title="Cambios pendientes"
+                      />
                     )}
-                    <div className="bg-stone-900 px-2 py-1 rounded font-mono text-[10px] border border-stone-800">
-                      {(p.productionWeight || 1).toFixed(1)}x
-                    </div>
+                  </div>
+
+                  {/* Workshop Specs: Telas & Meterage */}
+                  <div className="text-[10px] text-stone-500 font-mono uppercase tracking-wider">
+                    {fabricsCount} TELAS • {p.fabricQuantity || 0}M
                   </div>
                 </button>
               );
@@ -408,15 +379,23 @@ export function ProductsView({ config, onChange, onNotify }: ProductsViewProps) 
               </div>
             </div>
 
-              {/* Precios Finales Proyectados */}
-              <div className="w-full pb-3 mb-3 border-b border-stone-800/40">
-                <ProductProjectedPrices
-                  draftProduct={draftProduct}
-                  config={config}
-                  isDirty={isDirty}
-                  onUpdateOverride={handleUpdateOverride}
-                />
-              </div>
+            {/* Fotografía de Catálogo (9:16) y Descripción */}
+            <div className="w-full pb-3 mb-3 border-b border-stone-800/40">
+              <ProductMediaEditor
+                draftProduct={draftProduct}
+                updateDraft={updateDraft}
+              />
+            </div>
+
+            {/* Precios Finales Proyectados */}
+            <div className="w-full pb-3 mb-3 border-b border-stone-800/40">
+              <ProductProjectedPrices
+                draftProduct={draftProduct}
+                config={config}
+                isDirty={isDirty}
+                onUpdateOverride={handleUpdateOverride}
+              />
+            </div>
 
               {/* Action Pill docked in top bar runway */}
               <div className="fixed top-2.5 right-44 z-50 bg-stone-900/90 border border-stone-800 px-3 py-1.5 rounded-xl shadow-lg flex items-center gap-2.5 backdrop-blur-md">

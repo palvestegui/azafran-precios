@@ -23,7 +23,7 @@ export function ProductWorkbenchHeader({
   return (
     <div className="flex flex-wrap items-end gap-3.5">
       {/* Nombre de Prenda */}
-      <div className="flex-1 min-w-[180px]">
+      <div className="flex-1 min-w-[280px]">
         <label className="text-[10px] uppercase font-bold text-stone-500 tracking-wider mb-1 block">
           Nombre de Prenda
         </label>

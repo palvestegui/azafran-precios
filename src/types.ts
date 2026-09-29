@@ -50,6 +50,9 @@ export interface Product {
   name: string;
   category?: string;
   description?: string;
+  imageUrl?: string;      // Vista Frontal (9:16)
+  backImageUrl?: string;  // Vista Posterior / Espalda (9:16)
+  laborCost?: number;
   defaultFabricId?: string;
   fabricQuantity?: number;
   allowedFabricIds?: string[];

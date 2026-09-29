@@ -1,31 +1,28 @@
-import { Firestore } from 'firebase-admin/firestore';
 import { GlobalConfig, Material } from '../types.js';
 import { calculateProductAnalysis } from './pricingCalculator.js';
 import { roundBob } from './calculations.js';
 
-export async function publishPreciosToVentas(dbLocal: Firestore, dbVentas: Firestore) {
-  if (!dbVentas) {
-    throw new Error('Ventas DB is not initialized.');
-  }
-
-  const configDoc = await dbLocal.collection('config').doc('system-wide-config').get();
-  if (!configDoc.exists) {
-    throw new Error('system-wide-config not found in Precios Firestore.');
-  }
-
-  const config = configDoc.data() as GlobalConfig;
-  const fabrics = config.materials.filter((m: Material) => m.category === 'fabric');
-
-  const garmentsPayload: Record<string, Record<string, { priceRaleo: number; priceB2B: number; isPrimary: boolean }>> = {};
-  const catalogGarmentsPayload: Record<string, {
+export interface VentasSyncPayload {
+  garments: Record<string, Record<string, { priceRaleo: number; priceB2B: number; isPrimary: boolean }>>;
+  catalogGarments: Record<string, {
     name: string;
     category: string;
     description: string;
+    imageUrl?: string;
+    backImageUrl?: string;
     defaultFabricName: string;
     priceRaleo: number;
     priceB2B: number;
     fabricVariants: Record<string, { priceRaleo: number; priceB2B: number; isPrimary: boolean }>;
-  }> = {};
+  }>;
+  lastSyncedAt: number;
+}
+
+export function buildVentasPayload(config: GlobalConfig): VentasSyncPayload {
+  const fabrics = config.materials.filter((m: Material) => m.category === 'fabric');
+
+  const garmentsPayload: VentasSyncPayload['garments'] = {};
+  const catalogGarmentsPayload: VentasSyncPayload['catalogGarments'] = {};
 
   for (const prod of config.products) {
     if (!prod.name || !prod.name.trim()) continue;
@@ -49,7 +46,7 @@ export async function publishPreciosToVentas(dbLocal: Firestore, dbVentas: Fires
         garmentsPayload[prod.name][fabric.name] = {
           priceRaleo: roundBob(raleo),
           priceB2B: roundBob(b2b),
-          isPrimary: fabric.id === prod.defaultFabricId
+          isPrimary: fabric.id === prod.defaultFabricId,
         };
       }
     } else {
@@ -72,34 +69,53 @@ export async function publishPreciosToVentas(dbLocal: Firestore, dbVentas: Fires
         fabricVariants[fabric.name] = {
           priceRaleo: raleo,
           priceB2B: b2b,
-          isPrimary
+          isPrimary,
         };
       }
 
       catalogGarmentsPayload[prod.name] = {
         name: prod.name,
-        category: category,
+        category,
         description: prod.description || '',
+        imageUrl: prod.imageUrl || '',
+        backImageUrl: prod.backImageUrl || '',
         defaultFabricName: defaultFabric ? defaultFabric.name : '',
         priceRaleo: primaryRaleo,
         priceB2B: primaryB2B,
-        fabricVariants
+        fabricVariants,
       };
     }
   }
 
-  const syncPayload = {
+  return {
     garments: garmentsPayload,
     catalogGarments: catalogGarmentsPayload,
-    lastSyncedAt: Date.now()
+    lastSyncedAt: Date.now(),
   };
+}
+
+export async function publishPreciosToVentas(
+  dbLocal: { collection: (name: string) => { doc: (id: string) => { get: () => Promise<{ exists: boolean; data: () => unknown }> } } },
+  dbVentas: { collection: (name: string) => { doc: (id: string) => { set: (data: unknown, options: { merge: boolean }) => Promise<unknown> } } }
+) {
+  if (!dbVentas) {
+    throw new Error('Ventas DB is not initialized.');
+  }
+
+  const configDoc = await dbLocal.collection('config').doc('system-wide-config').get();
+  if (!configDoc.exists) {
+    throw new Error('system-wide-config not found in Precios Firestore.');
+  }
+
+  const config = configDoc.data() as GlobalConfig;
+  const syncPayload = buildVentasPayload(config);
 
   await dbVentas.collection('pricing').doc('global').set(syncPayload, { merge: true });
 
   return {
     success: true,
-    baseCount: Object.keys(garmentsPayload).length,
-    catalogCount: Object.keys(catalogGarmentsPayload).length,
-    lastSyncedAt: syncPayload.lastSyncedAt
+    baseCount: Object.keys(syncPayload.garments).length,
+    catalogCount: Object.keys(syncPayload.catalogGarments).length,
+    lastSyncedAt: syncPayload.lastSyncedAt,
   };
 }
