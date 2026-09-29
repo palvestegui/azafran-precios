@@ -2,6 +2,16 @@
 
 ## [Unreleased] - 2026-09-29
 
+### Fix Image Distortion in Dual-View Splitter (Proportional 9:16 Center-Crop) (`imageSplitter.ts`)
+- **Proportional 9:16 Center-Cropping (`src/utils/imageSplitter.ts`)**:
+  - Replaced anisotropic canvas scaling with proportional center-cropping (`targetAspect = 9 / 16`).
+  - For dual-view images (`w / h > 1.1`), computes proportional 9:16 crop window for each half (`halfW = w / 2`), centering source coordinates around each half's optical midpoint with bounding clamping.
+  - For single images, calculates symmetrical center crop (`cropW = h * targetAspect`, `srcX = (w - cropW) / 2`, `srcY = (h - cropH) / 2`), eliminating horizontal squeezing and preserving 1:1 garment proportions.
+  - Kept export `processSingleImage` for individual view replacements.
+- **Rule 300/500 & Strict Type Safety**:
+  - `src/utils/imageSplitter.ts`: 96 lines (< 300 max limit for logical files).
+  - Zero `any` or `@ts-ignore` annotations.
+
 ### Preserve Category, Description, and Images in validateProduct Sanitizer (`validation.ts`)
 - **Product Sanitizer Whitelist (`src/utils/validation.ts`)**:
   - Explicitly whitelisted and sanitized `category`, `description`, `imageUrl` (Frontal 9:16), `backImageUrl` (Posterior 9:16), and `laborCost` in `validateProduct`.
