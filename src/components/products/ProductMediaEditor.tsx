@@ -6,9 +6,10 @@ import {
   Image as ImageIcon,
   Sparkles,
   Loader2,
+  Scissors,
 } from "lucide-react";
 import { Product } from "../../types";
-import { processGarmentImage, processSingleImage } from "../../utils/imageSplitter";
+import { cropCenter916, splitDualDiptych } from "../../utils/imageSplitter";
 
 interface ProductMediaEditorProps {
   draftProduct: Product;
@@ -33,19 +34,13 @@ export function ProductMediaEditor({
     setIsProcessing(true);
     setErrorMsg(null);
     try {
-      const result = await processGarmentImage(file);
-      if (result.isDual && result.back) {
-        updateDraft({
-          imageUrl: result.front,
-          backImageUrl: result.back,
-        });
-      } else {
-        updateDraft({
-          imageUrl: result.front,
-        });
-      }
+      const { front, back } = await splitDualDiptych(file);
+      updateDraft({
+        imageUrl: front,
+        backImageUrl: back,
+      });
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Error procesando la imagen";
+      const msg = err instanceof Error ? err.message : "Error al procesar foto doble";
       setErrorMsg(msg);
     } finally {
       setIsProcessing(false);
@@ -63,7 +58,7 @@ export function ProductMediaEditor({
     setIsProcessing(true);
     setErrorMsg(null);
     try {
-      const base64 = await processSingleImage(file);
+      const base64 = await cropCenter916(file);
       if (type === "front") {
         updateDraft({ imageUrl: base64 });
       } else {
@@ -148,14 +143,14 @@ export function ProductMediaEditor({
           <div className="mt-3 bg-stone-950/70 border border-stone-800/80 rounded-xl p-3 flex items-center justify-between gap-3">
             <div className="flex items-center gap-2 min-w-0">
               <div className="w-8 h-8 rounded-lg bg-amber-500/10 border border-amber-500/30 flex items-center justify-center shrink-0 text-amber-400">
-                <ImageIcon className="w-4 h-4" />
+                <Scissors className="w-4 h-4" />
               </div>
               <div className="truncate">
                 <p className="text-xs font-bold text-stone-300 truncate">
-                  Díptico Dual o Foto Individual
+                  Dividir Foto Doble (Díptico)
                 </p>
                 <p className="text-[10px] text-stone-500">
-                  Detecta automáticamente fotos dobles frente/espalda
+                  Corta frente (izq.) y espalda (der.) automáticamente
                 </p>
               </div>
             </div>
@@ -168,9 +163,9 @@ export function ProductMediaEditor({
               {isProcessing ? (
                 <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-400" />
               ) : (
-                <UploadCloud className="w-3.5 h-3.5 text-amber-400" />
+                <Scissors className="w-3.5 h-3.5 text-amber-400" />
               )}
-              <span>Cargar Imagen</span>
+              <span>✂️ Dividir Foto Doble</span>
             </button>
           </div>
 

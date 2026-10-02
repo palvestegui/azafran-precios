@@ -11,6 +11,7 @@ import {
   AuthorizedUser,
 } from "../types";
 import { DEFAULT_GLOBAL_CONFIG } from "../data/defaultCatalog";
+import { ensureMaterialSkus, ensureProductSkus } from "./skuGenerator";
 
 export const VALID_UNITS: readonly Unit[] = [
   "m",
@@ -87,6 +88,10 @@ export function validateMaterial(raw: unknown): Material | null {
     category,
   };
 
+  if (typeof raw.sku === "string" && raw.sku.trim()) {
+    mat.sku = sanitizeString(raw.sku);
+  }
+
   if (typeof raw.batchSize === "number" || typeof raw.batchSize === "string") {
     mat.batchSize = Math.max(1, sanitizeNumber(raw.batchSize, 1));
   }
@@ -140,6 +145,10 @@ export function validateProduct(raw: unknown): Product | null {
     : [];
 
   const prod: Product = { id, name, ingredients };
+
+  if (typeof raw.sku === "string" && raw.sku.trim()) {
+    prod.sku = sanitizeString(raw.sku);
+  }
 
   // Explicitly preserve category, description, and dual-view images
   if (typeof raw.category === "string") {
@@ -241,22 +250,22 @@ export function validateAndNormalizeGlobalConfig(
 ): GlobalConfig {
   if (!isRecord(raw)) return fallback;
 
-  const materials = Array.isArray(raw.materials)
+  const rawMats = Array.isArray(raw.materials)
     ? raw.materials.map(validateMaterial).filter((m): m is Material => m !== null)
     : fallback.materials;
+  const materials = ensureMaterialSkus(rawMats);
 
-  const products = Array.isArray(raw.products)
+  const rawProds = Array.isArray(raw.products)
     ? raw.products.map(validateProduct).filter((p): p is Product => p !== null)
     : fallback.products;
+  const products = ensureProductSkus(rawProds);
 
   const regularPayments = Array.isArray(raw.regularPayments)
     ? raw.regularPayments.map(validateExpense).filter((e): e is Expense => e !== null)
     : fallback.regularPayments;
-
   const dailyExpenses = Array.isArray(raw.dailyExpenses)
     ? raw.dailyExpenses.map(validateDailyExpense).filter((d): d is DailyExpense => d !== null)
     : fallback.dailyExpenses;
-
   const staff = Array.isArray(raw.staff)
     ? raw.staff.map(validateStaff).filter((s): s is Staff => s !== null)
     : fallback.staff;
@@ -273,17 +282,14 @@ export function validateAndNormalizeGlobalConfig(
   }
 
   return {
-    materials: Array.isArray(raw.materials) ? materials : fallback.materials,
-    products: Array.isArray(raw.products) ? products : fallback.products,
-    regularPayments: Array.isArray(raw.regularPayments) ? regularPayments : fallback.regularPayments,
-    dailyExpenses: Array.isArray(raw.dailyExpenses) ? dailyExpenses : fallback.dailyExpenses,
-    staff: Array.isArray(raw.staff) ? staff : fallback.staff,
-    productionCapacity: Math.max(
-      1,
-      sanitizeNumber(raw.productionCapacity, fallback.productionCapacity)
-    ),
+    materials,
+    products,
+    regularPayments,
+    dailyExpenses,
+    staff,
+    productionCapacity: Math.max(1, sanitizeNumber(raw.productionCapacity, fallback.productionCapacity)),
     profitMargin: sanitizeNumber(raw.profitMargin, fallback.profitMargin),
     wholesaleMargin: sanitizeNumber(raw.wholesaleMargin, fallback.wholesaleMargin ?? 20),
-    authorizedUsers: authorizedUsers,
+    authorizedUsers,
   };
 }

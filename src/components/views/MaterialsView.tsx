@@ -13,6 +13,7 @@ import {
   MarginRiskItem,
 } from "../../utils/marginSentinel";
 import { MarginSentinelModal } from "../materials/MarginSentinelModal";
+import { generateNextSku, SKU_PREFIX } from "../../utils/skuGenerator";
 
 export interface MaterialsViewProps {
   config: GlobalConfig;
@@ -42,8 +43,10 @@ export function MaterialsView({
 
   const addMaterial = (category: "fabric" | "other") => {
     const newId = crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2, 9);
+    const prefix = category === "fabric" ? SKU_PREFIX.FABRIC : SKU_PREFIX.SUPPLY;
     const newMaterial: Material = {
       id: newId,
+      sku: generateNextSku(prefix, config.materials),
       name: category === "fabric" ? "Nueva Tela" : "Nuevo Insumo",
       category,
       unit: category === "fabric" ? "m" : "unit",
@@ -180,6 +183,7 @@ export function MaterialsView({
                 <thead>
                   <tr className="border-b border-stone-800 bg-stone-950/80 text-[11px] font-mono uppercase tracking-wider text-stone-400">
                     <th className="py-3 px-4">Tela</th>
+                    <th className="py-3 px-3 w-28">SKU</th>
                     <th className="py-3 px-3 w-28">Unidad</th>
                     <th className="py-3 px-3 w-32">Costo / Metro (Bs)</th>
                     <th className="py-3 px-3 w-28">Extra Logística</th>
@@ -204,6 +208,14 @@ export function MaterialsView({
                             onChange={(e) => updateFabricField(mat.id, "name", e.target.value)}
                             className="bg-transparent text-white font-bold text-sm w-full border-b border-transparent hover:border-stone-700 focus:border-orange-500 focus:outline-none"
                           />
+                        </td>
+                        <td className="py-2.5 px-3">
+                          <span
+                            className="inline-block px-2 py-0.5 rounded bg-stone-950 border border-stone-800 text-[11px] font-mono font-bold text-amber-500/90 tracking-wider select-all cursor-default"
+                            title="SKU Inmutable"
+                          >
+                            {current.sku || "TEL-????"}
+                          </span>
                         </td>
                         <td className="py-2.5 px-3 font-mono text-xs text-stone-400">Metro</td>
                         <td className="py-2.5 px-3">
@@ -326,6 +338,7 @@ export function MaterialsView({
                 <thead>
                   <tr className="border-b border-stone-800 bg-stone-950/80 text-[11px] font-mono uppercase tracking-wider text-stone-400">
                     <th className="py-3 px-4">Insumo</th>
+                    <th className="py-3 px-3 w-28">SKU</th>
                     <th className="py-3 px-3 w-36">Presentación / Unidad</th>
                     <th className="py-3 px-3 w-32">Costo Compra (Bs)</th>
                     <th className="py-3 px-3 w-28">Extra Logística</th>
@@ -352,6 +365,14 @@ export function MaterialsView({
                             onChange={(e) => updateSupplyField(mat.id, "name", e.target.value)}
                             className="bg-transparent text-white font-bold text-sm w-full border-b border-transparent hover:border-stone-700 focus:border-orange-500 focus:outline-none"
                           />
+                        </td>
+                        <td className="py-2.5 px-3">
+                          <span
+                            className="inline-block px-2 py-0.5 rounded bg-stone-950 border border-stone-800 text-[11px] font-mono font-bold text-stone-400 tracking-wider select-all cursor-default"
+                            title="SKU Inmutable"
+                          >
+                            {current.sku || "INS-????"}
+                          </span>
                         </td>
                         <td className="py-2.5 px-3">
                           <select

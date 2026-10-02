@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from "react";
 import { Plus, Trash2, Check, X, Search } from "lucide-react";
 import { GlobalConfig, Material, Unit } from "../../types";
+import { generateNextSku, SKU_PREFIX } from "../../utils/skuGenerator";
 
 export interface AccessoriesViewProps {
   config: GlobalConfig;
@@ -27,6 +28,7 @@ export function AccessoriesView({ config, onChange, onNotify }: AccessoriesViewP
   const addAccessory = () => {
     const newAcc: Material = {
       id: generateId(),
+      sku: generateNextSku(SKU_PREFIX.ACCESSORY, config.materials),
       name: "",
       category: "accessory",
       unit: "unit",
@@ -51,7 +53,7 @@ export function AccessoriesView({ config, onChange, onNotify }: AccessoriesViewP
     onNotify?.(`"${target?.name || "Accesorio"}" eliminado`, "info");
   };
 
-  const handleDraftChange = (id: string, field: keyof Material, value: any) => {
+  const handleDraftChange = <K extends keyof Material>(id: string, field: K, value: Material[K]) => {
     const original = config.materials.find((s) => s.id === id);
     const current = drafts[id] || original;
     if (!current) return;
@@ -106,6 +108,7 @@ export function AccessoriesView({ config, onChange, onNotify }: AccessoriesViewP
           <thead className="text-[10px] uppercase bg-stone-900/80 sticky top-0 z-10 shadow-sm border-b border-stone-800">
             <tr>
               <th className="px-3 py-3 font-mono font-bold text-stone-400">Accesorio</th>
+              <th className="px-3 py-3 font-mono font-bold text-stone-400 w-28">SKU</th>
               <th className="px-3 py-3 font-mono font-bold text-stone-400 w-28">Tipo</th>
               <th className="px-3 py-3 font-mono font-bold text-stone-400 w-28">Unidad</th>
               <th className="px-3 py-3 font-mono font-bold text-stone-400 w-28">Costo Compra</th>
@@ -133,6 +136,14 @@ export function AccessoriesView({ config, onChange, onNotify }: AccessoriesViewP
                       value={data.name}
                       onChange={(e) => handleDraftChange(acc.id, "name", e.target.value)}
                     />
+                  </td>
+                  <td className="px-3 py-1.5">
+                    <span
+                      className="inline-block px-2 py-0.5 rounded bg-stone-950 border border-stone-800 text-[11px] font-mono font-bold text-emerald-400 tracking-wider select-all cursor-default"
+                      title="SKU Inmutable"
+                    >
+                      {data.sku || "ACS-????"}
+                    </span>
                   </td>
                   <td className="px-3 py-1.5">
                     <select

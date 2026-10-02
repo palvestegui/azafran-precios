@@ -8,6 +8,7 @@ import { ProductIngredientsTable } from "../products/ProductIngredientsTable";
 import { ProductProjectedPrices } from "../products/ProductProjectedPrices";
 import { ProductWorkbenchHeader } from "../products/ProductWorkbenchHeader";
 import { ProductMediaEditor } from "../products/ProductMediaEditor";
+import { generateNextSku, SKU_PREFIX } from "../../utils/skuGenerator";
 
 interface ProductsViewProps {
   config: GlobalConfig;
@@ -84,6 +85,7 @@ export function ProductsView({ config, onChange, onNotify }: ProductsViewProps) 
   const createNewProduct = () => {
     const newProduct: Product = {
       id: generateId(),
+      sku: generateNextSku(SKU_PREFIX.PRODUCT, config.products),
       name: "Nueva Prenda",
       ingredients: [],
       productionWeight: 1.0,
@@ -136,6 +138,7 @@ export function ProductsView({ config, onChange, onNotify }: ProductsViewProps) 
     const clonedId = `garment_${Date.now()}`;
     const clonedProduct: Product = {
       id: clonedId,
+      sku: generateNextSku(SKU_PREFIX.PRODUCT, config.products),
       name: `Copia de ${activeProduct.name || "Prenda"}`,
       category: activeProduct.category,
       description: activeProduct.description,
@@ -342,7 +345,7 @@ export function ProductsView({ config, onChange, onNotify }: ProductsViewProps) 
 
                   {/* Workshop Specs: Telas & Meterage */}
                   <div className="text-[10px] text-stone-500 font-mono uppercase tracking-wider">
-                    {fabricsCount} TELAS • {p.fabricQuantity || 0}M
+                    {p.sku ? `${p.sku} • ` : ""}{fabricsCount} TELAS • {p.fabricQuantity || 0}M
                   </div>
                 </button>
               );

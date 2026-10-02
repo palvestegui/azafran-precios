@@ -1,62 +1,87 @@
 import { GlobalConfig, Material } from '../types.js';
 import { calculateProductAnalysis } from './pricingCalculator.js';
 import { roundBob } from './calculations.js';
+import { ensureMaterialSkus, ensureProductSkus } from './skuGenerator.js';
+
+export interface FabricVariantPayload {
+  fabricSku: string;
+  priceRaleo: number;
+  priceB2B: number;
+  isPrimary: boolean;
+}
+
+export interface CatalogGarmentSyncEntry {
+  sku: string;
+  name: string;
+  category: string;
+  description: string;
+  imageUrl?: string;
+  backImageUrl?: string;
+  defaultFabricName: string;
+  defaultFabricSku?: string;
+  priceRaleo: number;
+  priceB2B: number;
+  fabricVariants: Record<string, FabricVariantPayload>;
+}
+
+export interface BaseGarmentPayload {
+  sku: string;
+  [fabricName: string]: FabricVariantPayload | string;
+}
 
 export interface VentasSyncPayload {
-  garments: Record<string, Record<string, { priceRaleo: number; priceB2B: number; isPrimary: boolean }>>;
-  catalogGarments: Record<string, {
-    name: string;
-    category: string;
-    description: string;
-    imageUrl?: string;
-    backImageUrl?: string;
-    defaultFabricName: string;
-    priceRaleo: number;
-    priceB2B: number;
-    fabricVariants: Record<string, { priceRaleo: number; priceB2B: number; isPrimary: boolean }>;
-  }>;
+  garments: Record<string, BaseGarmentPayload>;
+  catalogGarments: Record<string, CatalogGarmentSyncEntry>;
   lastSyncedAt: number;
 }
 
-export function buildVentasPayload(config: GlobalConfig): VentasSyncPayload {
-  const fabrics = config.materials.filter((m: Material) => m.category === 'fabric');
+export function buildVentasPayload(rawConfig: GlobalConfig): VentasSyncPayload {
+  const products = ensureProductSkus(rawConfig.products || []);
+  const materials = ensureMaterialSkus(rawConfig.materials || []);
+  const config: GlobalConfig = { ...rawConfig, products, materials };
+
+  const fabrics = materials.filter((m: Material) => m.category === 'fabric');
 
   const garmentsPayload: VentasSyncPayload['garments'] = {};
   const catalogGarmentsPayload: VentasSyncPayload['catalogGarments'] = {};
 
-  for (const prod of config.products) {
+  for (const prod of products) {
     if (!prod.name || !prod.name.trim()) continue;
 
     const category = (prod.category || '').trim();
     const isBase = category.toLowerCase().includes('base') || category.toLowerCase().includes('patrón');
 
-    const defaultFabric = fabrics.find((f) => f.id === prod.defaultFabricId) || fabrics[0];
+    const defaultFabric = fabrics.find((f) => f.id === prod.defaultFabricId || (f.sku && prod.defaultFabricId === f.sku)) || fabrics[0];
     const targetFabrics = prod.allowedFabricIds && prod.allowedFabricIds.length > 0
-      ? fabrics.filter((f) => prod.allowedFabricIds!.includes(f.id))
+      ? fabrics.filter((f) => prod.allowedFabricIds!.includes(f.id) || (f.sku && prod.allowedFabricIds!.includes(f.sku)))
       : fabrics;
 
     if (isBase) {
-      garmentsPayload[prod.name] = {};
+      const baseVariants: BaseGarmentPayload = {
+        sku: prod.sku || '',
+      };
       for (const fabric of targetFabrics) {
         const analysis = calculateProductAnalysis(prod, config, fabric.id);
-        const override = prod.variantOverrides?.[fabric.id];
+        const override = prod.variantOverrides?.[fabric.id] || (fabric.sku ? prod.variantOverrides?.[fabric.sku] : undefined);
         const raleo = override?.customRetailPrice ?? analysis.recommendedPrice;
         const b2b = override?.customWholesalePrice ?? analysis.recommendedWholesalePrice;
 
-        garmentsPayload[prod.name][fabric.name] = {
+        baseVariants[fabric.name] = {
+          fabricSku: fabric.sku || '',
           priceRaleo: roundBob(raleo),
           priceB2B: roundBob(b2b),
           isPrimary: fabric.id === prod.defaultFabricId,
         };
       }
+      garmentsPayload[prod.name] = baseVariants;
     } else {
-      const fabricVariants: Record<string, { priceRaleo: number; priceB2B: number; isPrimary: boolean }> = {};
+      const fabricVariants: Record<string, FabricVariantPayload> = {};
       let primaryRaleo = 0;
       let primaryB2B = 0;
 
       for (const fabric of targetFabrics) {
         const analysis = calculateProductAnalysis(prod, config, fabric.id);
-        const override = prod.variantOverrides?.[fabric.id];
+        const override = prod.variantOverrides?.[fabric.id] || (fabric.sku ? prod.variantOverrides?.[fabric.sku] : undefined);
         const raleo = roundBob(override?.customRetailPrice ?? analysis.recommendedPrice);
         const b2b = roundBob(override?.customWholesalePrice ?? analysis.recommendedWholesalePrice);
         const isPrimary = fabric.id === prod.defaultFabricId;
@@ -67,6 +92,7 @@ export function buildVentasPayload(config: GlobalConfig): VentasSyncPayload {
         }
 
         fabricVariants[fabric.name] = {
+          fabricSku: fabric.sku || '',
           priceRaleo: raleo,
           priceB2B: b2b,
           isPrimary,
@@ -74,12 +100,14 @@ export function buildVentasPayload(config: GlobalConfig): VentasSyncPayload {
       }
 
       catalogGarmentsPayload[prod.name] = {
+        sku: prod.sku || '',
         name: prod.name,
         category,
         description: prod.description || '',
         imageUrl: prod.imageUrl || '',
         backImageUrl: prod.backImageUrl || '',
         defaultFabricName: defaultFabric ? defaultFabric.name : '',
+        defaultFabricSku: defaultFabric?.sku || '',
         priceRaleo: primaryRaleo,
         priceB2B: primaryB2B,
         fabricVariants,

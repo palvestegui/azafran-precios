@@ -38,7 +38,9 @@ export function calculateProductMaterialCost(
   overrideFabricId?: string
 ): number {
   let cost = prod.ingredients.reduce((acc, current) => {
-    const mat = materials.find((m) => m.id === current.materialId);
+    const mat = materials.find(
+      (m) => m.id === current.materialId || (m.sku && current.materialId === m.sku)
+    );
     if (mat?.category === "fabric") return acc; // Ignore any old fabric ingredients
     return acc + getMaterialCost(mat, current.quantity, materials, new Set());
   }, 0);
@@ -46,7 +48,9 @@ export function calculateProductMaterialCost(
   const fabricId =
     overrideFabricId !== undefined ? overrideFabricId : prod.defaultFabricId;
   if (fabricId && prod.fabricQuantity) {
-    const fabricMat = materials.find((m) => m.id === fabricId);
+    const fabricMat = materials.find(
+      (m) => m.id === fabricId || (m.sku && fabricId === m.sku)
+    );
     cost += getMaterialCost(
       fabricMat,
       prod.fabricQuantity,

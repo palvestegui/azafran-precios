@@ -1,6 +1,50 @@
 # Changelog
 
+## [Unreleased] - 2026-10-02
+
+### Automated Immutable Alphanumeric SKU System (`types.ts`, `skuGenerator.ts`, `validation.ts`, `ventasPublisher.ts`, `server.ts`, `ProductCard.tsx`, `MaterialsView.tsx`, `AccessoriesView.tsx`, `ProductIngredientsTable.tsx`)
+- **Type Architecture Extensions (`src/types/index.ts`, `src/types.ts`)**:
+  - Added immutable `sku?: string` to `Product` and `Material`.
+  - Added explicit domain specializations: `Fabric extends Material { category: 'fabric' }` and `Accessory extends Material { category: 'accessory' }`.
+  - Created `src/types/index.ts` re-exporting root types for standardized modular imports.
+- **Dynamic SKU Generator & Migration Engine (`src/utils/skuGenerator.ts`)**:
+  - Implemented `generateNextSku(prefix, items)`: Computes sequential zero-padded 4-digit codes (`PREFIX-0001`) from active arrays without hardcoded maps.
+  - Standardized prefix registry: `PRD` for garments, `TEL` for fabrics, `INS` for supplies/insumos, and `ACS` for accessories.
+  - Implemented non-destructive startup migration helpers: `ensureProductSkus` and `ensureMaterialSkus` scanning state and assigning sequential SKUs to any legacy entity lacking one while permanently preserving assigned ones.
+- **Persistence & Sanitizer Whitelisting (`src/utils/validation.ts`, `src/data/defaultCatalog.ts`)**:
+  - Whitelisted `sku` in `validateMaterial` and `validateProduct`.
+  - Normalized live Firestore snapshots and local backups through `ensureMaterialSkus` and `ensureProductSkus`.
+  - Initialized default catalogs dynamically using `ensureMaterialSkus` and `ensureProductSkus`.
+- **UI Integration & Immutability Badges**:
+  - `ProductCard.tsx`: Rendered compact, read-only `[ SKU: {product.sku} ]` badge adjacent to product name input.
+  - `ProductWorkbenchHeader.tsx`: Rendered read-only `[ SKU: {draftProduct.sku} ]` badge adjacent to 'Nombre de Prenda'.
+  - `ProductsView.tsx`: Integrated SKU in the garment sidebar card specifications line and assigned SKUs during garment creation and cloning.
+  - `MaterialsView.tsx`: Added dedicated read-only SKU column/badge for `TEL-XXXX` (Telas) and `INS-XXXX` (Insumos); assigned sequential SKUs on new material creation.
+  - `AccessoriesView.tsx`: Added dedicated read-only SKU column/badge for `ACS-XXXX` (Accesorios) and auto-generation on item creation; fixed unsafe `any` types.
+  - `ProductIngredientsTable.tsx`: Rendered read-only SKU badge beside ingredient name and bound recipe lookups to material `id` and `sku`, ensuring cost calculations remain invariant if names are altered.
+- **Recipe Invariance & Pricing Engines (`calculations.ts`, `pricingCalculator.ts`)**:
+  - Updated `getMaterialTrueCostPerUnit` and `calculateProductMaterialCost` to match materials and fabrics by either `id` or `sku`.
+- **Sync Payload Exporter (`src/utils/ventasPublisher.ts`, `server.ts`)**:
+  - In `precios_sync_to_ventas` and `buildVentasPayload`: Exported immutable `sku` on all garments and catalog garments (`BaseGarmentPayload.sku`, `CatalogGarmentSyncEntry.sku`).
+  - Included `fabricSku` within all nested fabric variants and `defaultFabricSku` on catalog items.
+  - Updated MCP server matrix generator (`buildMatrix`) and `addProduct` to register and export garment and fabric SKUs.
+- **Rule 300 / Rule 500 Compliance & Strict Type Safety**:
+  - All logical files < 300 lines; all visual components < 500 lines.
+  - Zero `any` or `@ts-ignore` annotations. Clean `tsc --noEmit` and build verification.
+
 ## [Unreleased] - 2026-09-29
+
+### Separate Normal Centered 9:16 Uploads from Explicit Dual Diptych Slicing (`imageSplitter.ts`, `ProductMediaEditor.tsx`)
+- **Dedicated Image Processors (`src/utils/imageSplitter.ts`)**:
+  - Implemented `cropCenter916(file)`: Slices an exact centered 9:16 vertical frame (`TARGET_W = 500, TARGET_H = 889`) from any standard photo (e.g. 16:9 studio shots), keeping the mannequin centered and discarding empty horizontal margins without stretching.
+  - Implemented `splitDualDiptych(file)`: Specifically engineered for diptychs with both front and back views (e.g., *Itamae*, *Jardín*); computes 9:16 center-crops for each half (`[0, halfW]` and `[halfW, w]`).
+- **Product Media Form Integration (`src/components/products/ProductMediaEditor.tsx`)**:
+  - Direct uploads to `[ Vista Frontal ]` and `[ Vista Posterior ]` invoke `cropCenter916` directly.
+  - Dedicated diptych action bar updated with clear branding: `[ ✂️ Dividir Foto Doble ]` invoking `splitDualDiptych`.
+- **Rule 300/500 & Strict Type Safety**:
+  - `src/utils/imageSplitter.ts`: 97 lines (< 300 max limit).
+  - `src/components/products/ProductMediaEditor.tsx`: 284 lines (< 500 max limit).
+  - Zero `any` or `@ts-ignore` annotations.
 
 ### Fix Image Distortion in Dual-View Splitter (Proportional 9:16 Center-Crop) (`imageSplitter.ts`)
 - **Proportional 9:16 Center-Cropping (`src/utils/imageSplitter.ts`)**:

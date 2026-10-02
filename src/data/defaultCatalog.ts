@@ -1,6 +1,7 @@
-import { GlobalConfig, Material } from "../types";
+import { GlobalConfig, Material, Product } from "../types";
+import { ensureMaterialSkus, ensureProductSkus } from "../utils/skuGenerator";
 
-export const VERIFIED_OPERATIONAL_MATERIALS: Material[] = [
+export const RAW_OPERATIONAL_MATERIALS: Material[] = [
   { id: "mat-camiseria-mix", name: "Camisería Mix", unit: "m", pricePerUnit: 44, category: "fabric", wastagePercentage: 5 },
   { id: "mat-cristal-camisero", name: "Cristal Camisero", unit: "m", pricePerUnit: 48, category: "fabric", wastagePercentage: 5 },
   { id: "mat-popelina-office", name: "Popelina Office", unit: "m", pricePerUnit: 52, category: "fabric", wastagePercentage: 5 },
@@ -30,9 +31,9 @@ export const VERIFIED_OPERATIONAL_MATERIALS: Material[] = [
   { id: "mat-bordado-nombre", name: "Bordado nombre", unit: "service", pricePerUnit: 15, category: "accessory", isSoldSeparately: true, retailMargin: 35, wholesaleMargin: 20 },
 ];
 
-export const DEFAULT_GLOBAL_CONFIG: GlobalConfig = {
-  materials: VERIFIED_OPERATIONAL_MATERIALS,
-  products: [
+export const VERIFIED_OPERATIONAL_MATERIALS: Material[] = ensureMaterialSkus(RAW_OPERATIONAL_MATERIALS);
+
+const INITIAL_PRODUCTS: Product[] = [
     {
       id: "prod-guardapolvo",
       name: "Guardapolvo",
@@ -179,7 +180,11 @@ export const DEFAULT_GLOBAL_CONFIG: GlobalConfig = {
       wholesaleMargin: 20,
       productionWeight: 1.0,
     },
-  ],
+];
+
+export const DEFAULT_GLOBAL_CONFIG: GlobalConfig = {
+  materials: VERIFIED_OPERATIONAL_MATERIALS,
+  products: ensureProductSkus(INITIAL_PRODUCTS),
   regularPayments: [
     { id: "pay-ia", name: "IA", amount: 200, period: "monthly" },
     { id: "pay-alquiler", name: "Alquiler Taller", amount: 0, period: "monthly" },

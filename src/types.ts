@@ -22,6 +22,7 @@ export interface AccessoryBatchCalculation {
 
 export interface Material {
   id: string;
+  sku?: string;
   name: string;
   category?: 'fabric' | 'other' | 'accessory' | 'service';
   unit: Unit;
@@ -38,6 +39,16 @@ export interface Material {
   wholesaleMargin?: number;
 }
 
+/** Fabric specialization of Material */
+export interface Fabric extends Material {
+  category: 'fabric';
+}
+
+/** Accessory specialization of Material */
+export interface Accessory extends Material {
+  category: 'accessory';
+}
+
 export interface VariantPriceOverride {
   customRetailPrice?: number;
   customWholesalePrice?: number;
@@ -47,6 +58,7 @@ export interface VariantPriceOverride {
 
 export interface Product {
   id: string;
+  sku?: string;
   name: string;
   category?: string;
   description?: string;

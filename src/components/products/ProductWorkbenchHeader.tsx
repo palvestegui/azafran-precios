@@ -24,9 +24,17 @@ export function ProductWorkbenchHeader({
     <div className="flex flex-wrap items-end gap-3.5">
       {/* Nombre de Prenda */}
       <div className="flex-1 min-w-[280px]">
-        <label className="text-[10px] uppercase font-bold text-stone-500 tracking-wider mb-1 block">
-          Nombre de Prenda
-        </label>
+        <div className="flex items-center justify-between gap-2 mb-1">
+          <label className="text-[10px] uppercase font-bold text-stone-500 tracking-wider block">
+            Nombre de Prenda
+          </label>
+          <span
+            className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-stone-900 text-stone-400 border border-stone-800 tracking-wider select-all cursor-default"
+            title="SKU Inmutable"
+          >
+            [ SKU: {draftProduct.sku || "PRD-0000"} ]
+          </span>
+        </div>
         <input
           type="text"
           className="w-full bg-stone-950 border border-stone-800 rounded-lg px-3 py-2 text-white focus:border-amber-500 outline-none text-sm font-bold"

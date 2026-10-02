@@ -1,85 +1,43 @@
+const TARGET_W = 500;
+const TARGET_H = 889; // Strict 9:16 (500 * 16 / 9)
+
 export interface DualViewResult {
   front: string;
   back?: string;
   isDual: boolean;
 }
 
-export async function processGarmentImage(file: File): Promise<DualViewResult> {
+/** Crops a centered 9:16 vertical frame from any image (ideal for 16:9 centered studio shots) */
+export async function cropCenter916(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
-    reader.onerror = () => reject(new Error('Error reading image file'));
+    reader.onerror = () => reject(new Error('Error al leer archivo'));
     reader.onload = () => {
       const img = new Image();
-      img.onerror = () => reject(new Error('Invalid image file'));
+      img.onerror = () => reject(new Error('Archivo de imagen no válido'));
       img.onload = () => {
         const { naturalWidth: w, naturalHeight: h } = img;
-        const isDual = (w / h) > 1.1;
-
-        const targetW = 500;
-        const targetH = Math.round(500 * (16 / 9)); // 889px (strict 9:16)
         const targetAspect = 9 / 16;
 
-        if (isDual) {
-          const halfW = w / 2;
-          
-          // Calculate proportional 9:16 crop window for each half
-          let cropW = h * targetAspect;
-          let cropH = h;
-          if (cropW > halfW) {
-            cropW = halfW;
-            cropH = cropW / targetAspect;
-          }
-
-          // 1. Front View (Left Half center)
-          const centerFrontX = halfW / 2;
-          const centerFrontY = h / 2;
-          const srcFrontX = Math.max(0, centerFrontX - (cropW / 2));
-          const srcFrontY = Math.max(0, centerFrontY - (cropH / 2));
-
-          const canvasFront = document.createElement('canvas');
-          canvasFront.width = targetW;
-          canvasFront.height = targetH;
-          const ctxF = canvasFront.getContext('2d');
-          if (!ctxF) return reject(new Error('Canvas error'));
-          ctxF.drawImage(img, srcFrontX, srcFrontY, cropW, cropH, 0, 0, targetW, targetH);
-          const front = canvasFront.toDataURL('image/jpeg', 0.85);
-
-          // 2. Back View (Right Half center)
-          const centerBackX = halfW + (halfW / 2);
-          const centerBackY = h / 2;
-          const srcBackX = Math.min(w - cropW, Math.max(halfW, centerBackX - (cropW / 2)));
-          const srcBackY = Math.max(0, centerBackY - (cropH / 2));
-
-          const canvasBack = document.createElement('canvas');
-          canvasBack.width = targetW;
-          canvasBack.height = targetH;
-          const ctxB = canvasBack.getContext('2d');
-          if (!ctxB) return reject(new Error('Canvas error'));
-          ctxB.drawImage(img, srcBackX, srcBackY, cropW, cropH, 0, 0, targetW, targetH);
-          const back = canvasBack.toDataURL('image/jpeg', 0.85);
-
-          resolve({ front, back, isDual: true });
-        } else {
-          // Single Image: Proportional center crop
-          let cropW = h * targetAspect;
-          let cropH = h;
-          if (cropW > w) {
-            cropW = w;
-            cropH = cropW / targetAspect;
-          }
-          const srcX = (w - cropW) / 2;
-          const srcY = (h - cropH) / 2;
-
-          const canvasSingle = document.createElement('canvas');
-          canvasSingle.width = targetW;
-          canvasSingle.height = targetH;
-          const ctxS = canvasSingle.getContext('2d');
-          if (!ctxS) return reject(new Error('Canvas error'));
-          ctxS.drawImage(img, srcX, srcY, cropW, cropH, 0, 0, targetW, targetH);
-          const front = canvasSingle.toDataURL('image/jpeg', 0.85);
-
-          resolve({ front, isDual: false });
+        let srcW = h * targetAspect;
+        let srcH = h;
+        if (srcW > w) {
+          srcW = w;
+          srcH = w / targetAspect;
         }
+
+        // Exact horizontal & vertical center crop
+        const srcX = (w - srcW) / 2;
+        const srcY = (h - srcH) / 2;
+
+        const canvas = document.createElement('canvas');
+        canvas.width = TARGET_W;
+        canvas.height = TARGET_H;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return reject(new Error('Canvas error'));
+
+        ctx.drawImage(img, srcX, srcY, srcW, srcH, 0, 0, TARGET_W, TARGET_H);
+        resolve(canvas.toDataURL('image/jpeg', 0.85));
       };
       img.src = reader.result as string;
     };
@@ -87,10 +45,53 @@ export async function processGarmentImage(file: File): Promise<DualViewResult> {
   });
 }
 
-/**
- * Processes a single uploaded file into a proportional 9:16 vertical card.
- */
-export async function processSingleImage(file: File): Promise<string> {
-  const result = await processGarmentImage(file);
-  return result.front;
+/** Slices a wide dual photo (like Itamae or Jardín) into Front (left) and Back (right) */
+export async function splitDualDiptych(file: File): Promise<{ front: string; back: string }> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('Error al leer archivo'));
+    reader.onload = () => {
+      const img = new Image();
+      img.onerror = () => reject(new Error('Archivo de imagen no válido'));
+      img.onload = () => {
+        const { naturalWidth: w, naturalHeight: h } = img;
+        const halfW = w / 2;
+        const targetAspect = 9 / 16;
+
+        // Render each half with center-cropped 9:16
+        const renderHalf = (startX: number): string => {
+          let srcW = h * targetAspect;
+          let srcH = h;
+          if (srcW > halfW) {
+            srcW = halfW;
+            srcH = halfW / targetAspect;
+          }
+          const srcX = startX + (halfW - srcW) / 2;
+          const srcY = (h - srcH) / 2;
+
+          const canvas = document.createElement('canvas');
+          canvas.width = TARGET_W;
+          canvas.height = TARGET_H;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) throw new Error('Canvas error');
+
+          ctx.drawImage(img, srcX, srcY, srcW, srcH, 0, 0, TARGET_W, TARGET_H);
+          return canvas.toDataURL('image/jpeg', 0.85);
+        };
+
+        const front = renderHalf(0);
+        const back = renderHalf(halfW);
+        resolve({ front, back });
+      };
+      img.src = reader.result as string;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+/** Compatibility aliases */
+export const processSingleImage = cropCenter916;
+export async function processGarmentImage(file: File): Promise<DualViewResult> {
+  const result = await splitDualDiptych(file);
+  return { front: result.front, back: result.back, isDual: true };
 }

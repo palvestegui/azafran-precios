@@ -12,10 +12,19 @@ import { roundBob } from "./src/utils/calculations.js";
 import { publishPreciosToVentas } from "./src/utils/ventasPublisher.js";
 import { GlobalConfig, Product } from "./src/types.js";
 import { DEFAULT_GLOBAL_CONFIG } from "./src/data/defaultCatalog.js";
+import { ensureMaterialSkus, ensureProductSkus, generateNextSku, SKU_PREFIX } from "./src/utils/skuGenerator.js";
 import firebaseConfig from "./firebase-applet-config.json";
 
 // Domain & MCP Interfaces
-interface PricingMatrixItem { garment: string; fabric: string; consumptionMeters: number; retailPrice: number; wholesalePrice: number; }
+interface PricingMatrixItem {
+  garmentSku?: string;
+  garment: string;
+  fabricSku?: string;
+  fabric: string;
+  consumptionMeters: number;
+  retailPrice: number;
+  wholesalePrice: number;
+}
 
 // Initialize Firebase Apps with explicit projectId to avoid default GCP project mismatches
 const localApp = admin.initializeApp({ projectId: firebaseConfig.projectId });
@@ -41,11 +50,19 @@ const mcpServer = new McpServer({ name: "ChefwearPricingMCP", version: "1.0.0" }
 async function getLocalConfig(): Promise<GlobalConfig> {
   try {
     const snap = await getDoc(doc(clientDb, "config", "system-wide-config"));
-    if (!snap.exists()) return DEFAULT_GLOBAL_CONFIG;
-    return (snap.data() as GlobalConfig) || DEFAULT_GLOBAL_CONFIG;
+    const raw = snap.exists() ? (snap.data() as GlobalConfig) : DEFAULT_GLOBAL_CONFIG;
+    return {
+      ...raw,
+      products: ensureProductSkus(raw.products || []),
+      materials: ensureMaterialSkus(raw.materials || []),
+    };
   } catch (error) {
     console.warn("Using default config, live fetch notice:", error instanceof Error ? error.message : error);
-    return DEFAULT_GLOBAL_CONFIG;
+    return {
+      ...DEFAULT_GLOBAL_CONFIG,
+      products: ensureProductSkus(DEFAULT_GLOBAL_CONFIG.products || []),
+      materials: ensureMaterialSkus(DEFAULT_GLOBAL_CONFIG.materials || []),
+    };
   }
 }
 
@@ -60,7 +77,15 @@ function buildMatrix(config: GlobalConfig): PricingMatrixItem[] {
       const o = prod.variantOverrides?.[fabric.id];
       const r = o?.retailPrice ?? o?.customRetailPrice ?? a.recommendedPrice;
       const w = o?.wholesalePrice ?? o?.customWholesalePrice ?? a.recommendedWholesalePrice;
-      matrix.push({ garment: prod.name, fabric: fabric.name, consumptionMeters: prod.fabricQuantity ?? 0, retailPrice: roundBob(r), wholesalePrice: roundBob(w) });
+      matrix.push({
+        garmentSku: prod.sku,
+        garment: prod.name,
+        fabricSku: fabric.sku,
+        fabric: fabric.name,
+        consumptionMeters: prod.fabricQuantity ?? 0,
+        retailPrice: roundBob(r),
+        wholesalePrice: roundBob(w),
+      });
     }
   }
   return matrix;
@@ -68,9 +93,19 @@ function buildMatrix(config: GlobalConfig): PricingMatrixItem[] {
 
 async function addProduct(name: string, category: string, fabricMeters: number, description?: string): Promise<string> {
   const config = await getLocalConfig();
-  config.products.push({ id: `prod-${Date.now()}`, name, category, description, fabricQuantity: fabricMeters, ingredients: [], productionWeight: 1 });
+  const sku = generateNextSku(SKU_PREFIX.PRODUCT, config.products);
+  config.products.push({
+    id: `prod-${Date.now()}`,
+    sku,
+    name,
+    category,
+    description,
+    fabricQuantity: fabricMeters,
+    ingredients: [],
+    productionWeight: 1,
+  });
   try { await setDoc(doc(clientDb, "config", "system-wide-config"), config); } catch { /* ignore */ }
-  return `Product ${name} added successfully.`;
+  return `Product ${name} (${sku}) added successfully.`;
 }
 
 async function updateFabricCost(fabricName: string, costPerMeter: number): Promise<{ message: string; isError?: boolean }> {

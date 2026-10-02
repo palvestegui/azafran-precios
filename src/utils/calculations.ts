@@ -60,7 +60,9 @@ export function getMaterialTrueCostPerUnit(
     const nextVisited = new Set(visited);
     nextVisited.add(mat.id);
     baseUnitCost = mat.ingredients.reduce((acc, current) => {
-      const subMat = materials.find((m) => m.id === current.materialId);
+      const subMat = materials.find(
+        (m) => m.id === current.materialId || (m.sku && current.materialId === m.sku)
+      );
       return acc + getMaterialCost(subMat, current.quantity, materials, nextVisited);
     }, 0);
   } else {

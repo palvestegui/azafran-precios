@@ -125,9 +125,11 @@ export function ProductIngredientsTable({
             <option
               key={i.id}
               value={i.id}
-              disabled={draftProduct.ingredients.some((ing) => ing.materialId === i.id)}
+              disabled={draftProduct.ingredients.some(
+                (ing) => ing.materialId === i.id || (i.sku && ing.materialId === i.sku)
+              )}
             >
-              {i.name}
+              {i.sku ? `[${i.sku}] ` : ""}{i.name}
             </option>
           ))}
         </select>
@@ -145,7 +147,9 @@ export function ProductIngredientsTable({
           </thead>
           <tbody className="divide-y divide-stone-800/50">
             {draftProduct.ingredients.map((ing) => {
-              const mat = config.materials.find((m) => m.id === ing.materialId);
+              const mat = config.materials.find(
+                (m) => m.id === ing.materialId || (m.sku && ing.materialId === m.sku)
+              );
               if (!mat) return null;
               const cost = getMaterialCost(mat, ing.quantity, config.materials);
               const isDiscretePack = mat.unit === "100pack" || mat.unit === "dozen";
@@ -155,7 +159,12 @@ export function ProductIngredientsTable({
                     className="px-3 py-2 min-w-[160px] max-w-[240px] whitespace-normal break-words leading-tight text-xs font-bold text-stone-200"
                     title={mat.name}
                   >
-                    {mat.name}
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className="text-[10px] font-mono font-semibold px-1.5 py-0.5 rounded bg-stone-900 border border-stone-800 text-stone-400 shrink-0">
+                        {mat.sku || "INS-????"}
+                      </span>
+                      <span>{mat.name}</span>
+                    </div>
                   </td>
                   <td className="px-2 py-2 w-16 text-center">
                     <IngredientQuantityInput
