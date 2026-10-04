@@ -10,12 +10,11 @@ import { getFirestore as getClientDb, doc, getDoc, setDoc } from "firebase/fires
 import { calculateProductAnalysis } from "./src/utils/pricingCalculator.js";
 import { roundBob } from "./src/utils/calculations.js";
 import { publishPreciosToVentas } from "./src/utils/ventasPublisher.js";
-import { GlobalConfig, Product } from "./src/types.js";
+import { GlobalConfig } from "./src/types.js";
 import { DEFAULT_GLOBAL_CONFIG } from "./src/data/defaultCatalog.js";
 import { ensureMaterialSkus, ensureProductSkus, generateNextSku, SKU_PREFIX } from "./src/utils/skuGenerator.js";
 import firebaseConfig from "./firebase-applet-config.json";
 
-// Domain & MCP Interfaces
 interface PricingMatrixItem {
   garmentSku?: string;
   garment: string;
@@ -26,27 +25,19 @@ interface PricingMatrixItem {
   wholesalePrice: number;
 }
 
-// Initialize Firebase Apps with explicit projectId to avoid default GCP project mismatches
-const localApp = admin.initializeApp({ projectId: firebaseConfig.projectId });
-const dbLocal = getFirestore(localApp, firebaseConfig.firestoreDatabaseId || "(default)");
-
 const clientApp = initClientApp(firebaseConfig);
 const clientDb = getClientDb(clientApp, firebaseConfig.firestoreDatabaseId);
 
-let dbVentas: FirebaseFirestore.Firestore;
+let dbVentas: FirebaseFirestore.Firestore | undefined;
 try {
-  const appVentas = admin.initializeApp(
-    { projectId: "mystic-return-81b2m" },
-    "ventas"
-  );
+  const appVentas = admin.initializeApp({ projectId: "mystic-return-81b2m" }, "ventas");
   dbVentas = getFirestore(appVentas, "ai-studio-0dba6e4d-b474-410e-b078-6e631bf1a01a");
 } catch (e) {
-  console.error("Failed to initialize Ventas app:", e);
+  console.warn("External Ventas DB init notice:", e instanceof Error ? e.message : e);
 }
 
 const mcpServer = new McpServer({ name: "ChefwearPricingMCP", version: "1.0.0" });
 
-// Helper to get local config via client SDK (resilient against gRPC IAM boundaries)
 async function getLocalConfig(): Promise<GlobalConfig> {
   try {
     const snap = await getDoc(doc(clientDb, "config", "system-wide-config"));
@@ -66,7 +57,6 @@ async function getLocalConfig(): Promise<GlobalConfig> {
   }
 }
 
-// Helper to build pricing matrix
 function buildMatrix(config: GlobalConfig): PricingMatrixItem[] {
   const matrix: PricingMatrixItem[] = [];
   const allFabrics = config.materials.filter((m) => m.category === "fabric");
@@ -89,6 +79,19 @@ function buildMatrix(config: GlobalConfig): PricingMatrixItem[] {
     }
   }
   return matrix;
+}
+
+function buildBundle(config: GlobalConfig) {
+  return {
+    materials: config.materials,
+    products: config.products,
+    matrix: buildMatrix(config),
+    stats: {
+      totalProducts: config.products.length,
+      totalFabrics: config.materials.filter((m) => m.category === "fabric").length,
+      lastUpdated: new Date().toISOString(),
+    },
+  };
 }
 
 async function addProduct(name: string, category: string, fabricMeters: number, description?: string): Promise<string> {
@@ -118,6 +121,9 @@ async function updateFabricCost(fabricName: string, costPerMeter: number): Promi
 }
 
 // MCP Tools
+mcpServer.tool("precios_get_bundle", "Unified bundle of materials, products, matrix, and catalog stats", {}, async () => ({
+  content: [{ type: "text", text: JSON.stringify(buildBundle(await getLocalConfig()), null, 2) }]
+}));
 mcpServer.tool("precios_get_matrix", "Returns active pricing matrix", {}, async () => ({
   content: [{ type: "text", text: JSON.stringify(buildMatrix(await getLocalConfig()), null, 2) }]
 }));
@@ -133,7 +139,7 @@ mcpServer.tool("precios_update_fabric_cost", "Updates fabric cost per meter", { 
 });
 mcpServer.tool("precios_sync_to_ventas", "Syncs rounded prices to Ventas DB", {}, async () => {
   try {
-    const result = await publishPreciosToVentas(dbLocal, dbVentas);
+    const result = await publishPreciosToVentas(clientDb, dbVentas);
     return { content: [{ type: "text", text: JSON.stringify({ success: true, baseCount: result.baseCount, catalogCount: result.catalogCount, lastSyncedAt: result.lastSyncedAt }) }] };
   } catch (err: unknown) {
     const errorMsg = err instanceof Error ? err.message : String(err);
@@ -163,6 +169,7 @@ async function startServer() {
         jsonrpc: "2.0", id,
         result: {
           tools: [
+            { name: "precios_get_bundle", description: "Get complete catalog bundle (materials, products, matrix, stats)", inputSchema: { type: "object", properties: {} } },
             { name: "precios_get_matrix", description: "Get live rounded pricing matrix", inputSchema: { type: "object", properties: {} } },
             { name: "precios_get_materials", description: "Get fabrics and supplies costs", inputSchema: { type: "object", properties: {} } },
             { name: "precios_add_product", description: "Add a new garment", inputSchema: { type: "object", properties: { name: { type: "string" }, category: { type: "string" }, fabricMeters: { type: "number" }, laborCost: { type: "number" }, description: { type: "string" } }, required: ["name", "category", "fabricMeters", "laborCost"] } },
@@ -178,8 +185,10 @@ async function startServer() {
       const args = (params?.arguments || {}) as Record<string, unknown>;
       try {
         let toolResult: unknown;
-        if (toolName === "precios_get_matrix") toolResult = buildMatrix(await getLocalConfig());
-        else if (toolName === "precios_get_materials") toolResult = (await getLocalConfig()).materials;
+        const config = await getLocalConfig();
+        if (toolName === "precios_get_bundle") toolResult = buildBundle(config);
+        else if (toolName === "precios_get_matrix") toolResult = buildMatrix(config);
+        else if (toolName === "precios_get_materials") toolResult = config.materials;
         else if (toolName === "precios_add_product") {
           toolResult = await addProduct(
             typeof args.name === "string" ? args.name : "Nueva Prenda",
@@ -192,7 +201,7 @@ async function startServer() {
           toolResult = r.message;
         } else if (toolName === "precios_sync_to_ventas") {
           try {
-            const syncRes = await publishPreciosToVentas(dbLocal, dbVentas);
+            const syncRes = await publishPreciosToVentas(clientDb, dbVentas);
             toolResult = { success: true, baseCount: syncRes.baseCount, catalogCount: syncRes.catalogCount, lastSyncedAt: syncRes.lastSyncedAt };
           } catch (syncErr: unknown) {
             const errorMsg = syncErr instanceof Error ? syncErr.message : String(syncErr);
@@ -217,6 +226,7 @@ async function startServer() {
     res.setHeader("Access-Control-Allow-Origin", "*");
     try {
       const payload = req.body;
+      if (payload) await setDoc(doc(clientDb, "pricing", "global"), payload, { merge: true });
       if (dbVentas && payload) {
         await dbVentas.collection("pricing").doc("global").set(payload, { merge: true });
       }
@@ -250,7 +260,7 @@ async function startServer() {
 
   app.post("/api/sync-to-ventas", async (_req, res) => {
     try {
-      const result = await publishPreciosToVentas(dbLocal, dbVentas);
+      const result = await publishPreciosToVentas(clientDb, dbVentas);
       res.json(result);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);

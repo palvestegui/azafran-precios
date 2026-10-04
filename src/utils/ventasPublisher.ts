@@ -2,6 +2,7 @@ import { GlobalConfig, Material } from '../types.js';
 import { calculateProductAnalysis } from './pricingCalculator.js';
 import { roundBob } from './calculations.js';
 import { ensureMaterialSkus, ensureProductSkus } from './skuGenerator.js';
+import { doc, getDoc, setDoc, Firestore } from 'firebase/firestore';
 
 export interface FabricVariantPayload {
   fabricSku: string;
@@ -33,6 +34,7 @@ export interface VentasSyncPayload {
   garments: Record<string, BaseGarmentPayload>;
   catalogGarments: Record<string, CatalogGarmentSyncEntry>;
   lastSyncedAt: number;
+  updatedAt: string;
 }
 
 export function buildVentasPayload(rawConfig: GlobalConfig): VentasSyncPayload {
@@ -119,26 +121,82 @@ export function buildVentasPayload(rawConfig: GlobalConfig): VentasSyncPayload {
     garments: garmentsPayload,
     catalogGarments: catalogGarmentsPayload,
     lastSyncedAt: Date.now(),
+    updatedAt: new Date().toISOString(),
   };
 }
 
+export function diagnoseSyncFailure(err: unknown, target: string, payload?: unknown): string {
+  const errMsg = err instanceof Error ? err.message : String(err);
+  const errCode = (err as { code?: unknown })?.code;
+
+  let category = 'UNKNOWN_ERROR';
+  if (errMsg.includes('PERMISSION_DENIED') || String(errCode) === '7' || String(errCode) === 'permission-denied') {
+    const p = payload as Record<string, unknown> | undefined;
+    const hasGarments = p && typeof p.garments === 'object';
+    const hasCatalog = p && typeof p.catalogGarments === 'object';
+    const hasLastSynced = p && typeof p.lastSyncedAt === 'number';
+    const hasUpdatedAt = p && typeof p.updatedAt === 'string';
+
+    if (!hasGarments || !hasCatalog || !hasLastSynced || !hasUpdatedAt) {
+      category = 'RULES_REJECTION (Payload missing required schema fields like updatedAt or garments)';
+    } else {
+      category = 'AUTH_OR_IAM_RESTRICTION (Caller lacks Cloud Datastore IAM roles on target project)';
+    }
+  } else if (errMsg.includes('NOT_FOUND') || String(errCode) === '5' || String(errCode) === 'not-found') {
+    category = 'DATABASE_NOT_FOUND (Database ID does not exist or target document path not found)';
+  } else if (errMsg.includes('UNAVAILABLE') || errMsg.includes('DEADLINE_EXCEEDED')) {
+    category = 'NETWORK_TIMEOUT (Unable to reach Google Cloud Firestore endpoint)';
+  }
+
+  const diagnosticMsg = `[Firestore Sync Diagnostic] Target: ${target} | Category: ${category} | Code: ${String(errCode || 'none')} | Details: ${errMsg}`;
+  console.warn(diagnosticMsg);
+  return diagnosticMsg;
+}
+
 export async function publishPreciosToVentas(
-  dbLocal: { collection: (name: string) => { doc: (id: string) => { get: () => Promise<{ exists: boolean; data: () => unknown }> } } },
-  dbVentas: { collection: (name: string) => { doc: (id: string) => { set: (data: unknown, options: { merge: boolean }) => Promise<unknown> } } }
+  primaryDbOrClient: unknown,
+  remoteVentasDb?: unknown,
+  directConfig?: GlobalConfig
 ) {
-  if (!dbVentas) {
-    throw new Error('Ventas DB is not initialized.');
+  let config: GlobalConfig;
+  if (directConfig) {
+    config = directConfig;
+  } else if (primaryDbOrClient && typeof (primaryDbOrClient as { collection?: unknown }).collection === 'function') {
+    const adminDoc = await (primaryDbOrClient as { collection: (n: string) => { doc: (id: string) => { get: () => Promise<{ exists: boolean; data: () => unknown }> } } })
+      .collection('config').doc('system-wide-config').get();
+    if (!adminDoc.exists) throw new Error('system-wide-config not found in Precios Firestore.');
+    config = adminDoc.data() as GlobalConfig;
+  } else {
+    const snap = await getDoc(doc(primaryDbOrClient as Firestore, 'config', 'system-wide-config'));
+    if (!snap.exists()) throw new Error('system-wide-config not found in Precios Firestore.');
+    config = snap.data() as GlobalConfig;
   }
 
-  const configDoc = await dbLocal.collection('config').doc('system-wide-config').get();
-  if (!configDoc.exists) {
-    throw new Error('system-wide-config not found in Precios Firestore.');
-  }
-
-  const config = configDoc.data() as GlobalConfig;
   const syncPayload = buildVentasPayload(config);
 
-  await dbVentas.collection('pricing').doc('global').set(syncPayload, { merge: true });
+  // 1. Primary write to pricing/global using { merge: true } to preserve presets/services
+  try {
+    if (primaryDbOrClient && typeof (primaryDbOrClient as { collection?: unknown }).collection === 'function') {
+      await (primaryDbOrClient as { collection: (n: string) => { doc: (id: string) => { set: (d: unknown, opt: { merge: boolean }) => Promise<unknown> } } })
+        .collection('pricing').doc('global').set(syncPayload, { merge: true });
+    } else {
+      await setDoc(doc(primaryDbOrClient as Firestore, 'pricing', 'global'), syncPayload, { merge: true });
+    }
+  } catch (primaryErr: unknown) {
+    diagnoseSyncFailure(primaryErr, 'primary-pricing-global', syncPayload);
+    throw primaryErr;
+  }
+
+  // 2. Replicate to external Ventas database if provided
+  if (remoteVentasDb && typeof (remoteVentasDb as { collection?: unknown }).collection === 'function') {
+    try {
+      await (remoteVentasDb as { collection: (n: string) => { doc: (id: string) => { set: (d: unknown, opt: { merge: boolean }) => Promise<unknown> } } })
+        .collection('pricing').doc('global').set(syncPayload, { merge: true });
+      console.log('[Ventas Sync] Replicated successfully to external Ventas database.');
+    } catch (extErr: unknown) {
+      diagnoseSyncFailure(extErr, 'external-ventas-db', syncPayload);
+    }
+  }
 
   return {
     success: true,

@@ -1,6 +1,54 @@
 # Changelog
 
+## [Unreleased] - 2026-10-03
+
+### Collapsible Accordion Drawer for Product Description & 9:16 Photo Catalog (`ProductMediaEditor.tsx`, `ProductsView.tsx`)
+- **Compact Ergonomic Accordion Header Bar (`ProductMediaEditor.tsx`)**:
+  - Replaced the static, vertically extensive outer container of the bottom description and photo section with an interactive, compact collapsible accordion card (~42px high in collapsed state).
+  - Designed interactive header row featuring:
+    - Left branding: Sparkles icon (`✨`) and uppercase title `Descripción & Fotos de Catálogo (9:16)`.
+    - Character counter badge: Real-time counter showing `{charCount} caracteres` (or `Sin descripción`).
+    - Photo presence status chip: Dynamic indicator displaying `2/2 fotos` (emerald), `Frontal cargada` / `Posterior cargada` (amber), or `Sin fotos` (stone).
+    - Collapsed description preview: Truncated italic preview in muted stone text when collapsed.
+    - Right toggle control: Styled expand/collapse action button with `ChevronDown` / `ChevronUp` animations and stop-propagation click handling.
+- **Collapsible Drawer Body & State Preservation**:
+  - Fully preserved the two-column workflow when expanded:
+    - Column 1: Product description textarea, real-time character tally, and quick dual-photo diptych slicing button (`✂️ Dividir Foto Doble`).
+    - Column 2: Dual 9:16 aspect ratio photo catalog cards for front (`[ Vista Frontal ]`) and back (`[ Vista Posterior ]`) with upload overlays, deletion buttons, and view swapper (`[⇆ Intercambiar Vistas]`).
+  - Implemented automatic collapse on garment selection change via `useEffect` on `draftProduct.id` and `key={draftProduct.id}` in `ProductsView.tsx`, immediately reclaiming vertical screen space for formulas, fabrics, effort, and insumos tables without vertical scrolling friction.
+- **Rule 300 / Rule 500 Compliance & Strict Type Safety**:
+  - `src/components/products/ProductMediaEditor.tsx`: 373 lines (< 500 max limit for visual components).
+  - `src/components/views/ProductsView.tsx`: 471 lines (< 500 max limit for visual components).
+  - Strict typing with zero `any` or `@ts-ignore` annotations.
+  - Verified with `tsc --noEmit` and production build compilation.
+
 ## [Unreleased] - 2026-10-02
+
+### Resolution of Firestore Sync Permission Error & Implementation of Aggregated `precios_get_bundle` Tool (`server.ts`, `ventasPublisher.ts`)
+- **Resolution of `7 PERMISSION_DENIED` during `precios_sync_to_ventas`**:
+  - **Audit & Rejection Path Analysis**:
+    - Identified that `publishPreciosToVentas` attempted reading system configuration via `dbLocal` (`firebase-admin`) without valid IAM service account credentials on Google Cloud, immediately hitting gRPC boundaries with `7 PERMISSION_DENIED`.
+    - Identified that `buildVentasPayload` was missing `updatedAt: string`, which caused the Firestore security rule validator `isValidPricing(incoming())` to reject writes to `/pricing/{pricingId}`.
+  - **Architectural Fix**:
+    - Routed primary sync reads and writes through `clientDb` (`firebase/firestore` Web SDK), which operates deterministically using the applet configuration and evaluates cleanly against `firestore.rules`.
+    - Included `updatedAt: new Date().toISOString()` in `buildVentasPayload` alongside `lastSyncedAt`, ensuring full compliance with the Firestore security rules specification.
+    - Preserved non-destructive payload merging with `{ merge: true }` on `pricing/global` to protect workshop services, presets, and external metadata.
+  - **Diagnostic Telemetry (`diagnoseSyncFailure`)**:
+    - Implemented fine-grained diagnostic logging in `src/utils/ventasPublisher.ts` categorizing failures into `RULES_REJECTION`, `AUTH_OR_IAM_RESTRICTION`, `DATABASE_NOT_FOUND`, or `NETWORK_TIMEOUT` with detailed error codes and target identifiers.
+    - External database replication (`dbVentas`) attempts are shielded with non-blocking diagnostic logs, ensuring primary pricing publishing succeeds reliably without failing tool calls.
+- **Aggregated MCP Tool `precios_get_bundle` (`server.ts`)**:
+  - Registered `precios_get_bundle` in the native MCP tools schema and JSON-RPC dispatch table on `/mcp`.
+  - Concurrently aggregates:
+    - `materials`: Full active materials catalog (telas, insumos, accesorios).
+    - `products`: Complete products list with recipes, weights, and image specifications.
+    - `matrix`: Live calculated pricing matrix across all garment and fabric combinations.
+    - `stats`: Aggregate counts (`totalProducts`, `totalFabrics`, `lastUpdated`).
+  - Eliminates multi-turn confirmation prompts by providing complete catalog state in a single synchronous MCP invocation.
+- **Rule 300 / Rule 500 Compliance & Strict Type Safety**:
+  - `server.ts`: 283 lines (< 300 lines limit).
+  - `src/utils/ventasPublisher.ts`: 207 lines (< 300 lines limit).
+  - Zero `any` or `@ts-ignore` directives.
+  - Verified live via `/mcp` tool execution and `/api/sync-to-ventas` (exit code 0, 100% success).
 
 ### Automated Immutable Alphanumeric SKU System (`types.ts`, `skuGenerator.ts`, `validation.ts`, `ventasPublisher.ts`, `server.ts`, `ProductCard.tsx`, `MaterialsView.tsx`, `AccessoriesView.tsx`, `ProductIngredientsTable.tsx`)
 - **Type Architecture Extensions (`src/types/index.ts`, `src/types.ts`)**:

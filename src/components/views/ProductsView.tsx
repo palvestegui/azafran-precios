@@ -385,6 +385,7 @@ export function ProductsView({ config, onChange, onNotify }: ProductsViewProps) 
             {/* Fotografía de Catálogo (9:16) y Descripción */}
             <div className="w-full pb-3 mb-3 border-b border-stone-800/40">
               <ProductMediaEditor
+                key={draftProduct.id}
                 draftProduct={draftProduct}
                 updateDraft={updateDraft}
               />
