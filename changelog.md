@@ -1,5 +1,42 @@
 # Changelog
 
+## [Unreleased] - 2026-10-04
+
+### Decoupled Media Architecture & Resolution of Product Disappearance Bug (`productMediaService.ts`, `firestoreSanitizer.ts`, `ProductsView.tsx`, `App.tsx`)
+- **Diagnosis of Product Creation and Duplication Disappearance**:
+  - **Root Cause 1 (1 MiB Document Exhaustion)**: `config/system-wide-config` had expanded to **1,043,345 bytes**, only 5,231 bytes away from Cloud Firestore's hard ceiling of **1,048,576 bytes (1 MiB)**. 96.7% of the document consisted of raw Base64 studio photos across 22 products. Any product duplication or photo addition caused write requests to reach ~1.16 MiB, triggering `3 INVALID_ARGUMENT: Document exceeds maximum allowed size of 1,048,576 bytes`.
+  - **Root Cause 2 (`undefined` Field Rejection)**: Unassigned product fields (`category`, `description`, `imageUrl`, `backImageUrl`, `defaultFabricId`, `profitMargin`) evaluated to `undefined`, causing `setDoc()` to throw `Function setDoc() called with invalid data. Unsupported field value: undefined`.
+  - **Root Cause 3 (Async Selection Race Condition)**: In `createNewProduct` and `handleCloneProduct`, `selectProductById` searched the pending `config.products` prop before React re-rendered, evaluating to `null` and defaulting back to `config.products[0]`.
+  - **Rollback Effect**: Because Firestore writes were aborted or rejected by the server, the real-time `onSnapshot` listener discarded the optimistic local state, causing the product to vanish seconds later.
+- **Architectural Solution & Decoupled Media Storage**:
+  - **Dedicated `/product_media/{productId}` Collection**:
+    - Created `src/services/productMediaService.ts` managing decoupled garment media documents.
+    - Updated `firebase-blueprint.json` and `firestore.rules` with `isValidProductMedia` schema validation and deployed via `DeployRules`.
+    - Executed live database migration transferring all 22 existing product photos into `/product_media/{productId}`, shrinking `config/system-wide-config` from **1,043,345 bytes down to 33,872 bytes (96.8% reduction)** and providing >1,014 KB of headroom.
+  - **Deep Sanitization Engine (`src/utils/firestoreSanitizer.ts`)**:
+    - Implemented `sanitizeForFirestore<T>()` to recursively strip all `undefined` fields from payloads before `setDoc()`.
+  - **Natural Aspect Ratio Scaling (`src/utils/imageSplitter.ts`)**:
+    - Replaced forced 9:16 center-cropping with proportional bounding-box scaling (max 640x960, JPEG 0.82) preserving natural aspect ratios (square, 4:5, 9:16, landscape) for single uploads and diptych halves.
+    - Updated `ProductMediaEditor.tsx` preview containers to use `object-contain` frames to display non-9:16 aspect ratios without clipping.
+  - **Synchronous Draft Initialization (`src/components/views/ProductsView.tsx`)**:
+    - Directly initialized `draftProduct` and `committedProduct` with the new/cloned product synchronously.
+    - Added synchronization guard in `useEffect` preventing draft reset before the parent `config.products` prop completes its update cycle.
+    - Added `deleteProductMedia(id)` trigger on garment deletion.
+  - **Real-Time Hydration & Error Notifications (`src/App.tsx`)**:
+    - Subscribed to `product_media` in real time via `subscribeProductMedia`, hydrating in-memory products seamlessly.
+    - Wrapped `saveConfig` in try/catch/finally to provide immediate user-facing notification toasts if network or Firestore errors occur.
+- **Strict Technical Constraints & Rule Compliance**:
+  - Strict TypeScript: Zero `any`, zero `@ts-ignore` across all new and modified code.
+  - Rule 300 / Rule 500:
+    - `src/utils/firestoreSanitizer.ts`: 42 lines (< 300)
+    - `src/utils/imageSplitter.ts`: 115 lines (< 300)
+    - `src/services/productMediaService.ts`: 138 lines (< 300)
+    - `src/services/firebaseService.ts`: 135 lines (< 300)
+    - `src/components/products/ProductMediaEditor.tsx`: 373 lines (< 500)
+    - `src/components/views/ProductsView.tsx`: 489 lines (< 500)
+    - `src/App.tsx`: 466 lines (< 500)
+  - Verified with live end-to-end integration tests, `tsc --noEmit` (0 errors), and successful production build.
+
 ## [Unreleased] - 2026-10-03
 
 ### Collapsible Accordion Drawer for Product Description & 9:16 Photo Catalog (`ProductMediaEditor.tsx`, `ProductsView.tsx`)

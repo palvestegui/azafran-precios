@@ -11,6 +11,8 @@ import firebaseConfig from '../../firebase-applet-config.json';
 import { GlobalConfig } from '../types';
 import { validateAndNormalizeGlobalConfig } from '../utils/validation';
 import { DEFAULT_GLOBAL_CONFIG, VERIFIED_OPERATIONAL_MATERIALS } from '../data/defaultCatalog';
+import { sanitizeForFirestore } from '../utils/firestoreSanitizer';
+import { saveProductMedia, stripMediaFromProduct } from './productMediaService';
 
 export { DEFAULT_GLOBAL_CONFIG, VERIFIED_OPERATIONAL_MATERIALS };
 export const DEFAULT_CONFIG: GlobalConfig = DEFAULT_GLOBAL_CONFIG;
@@ -104,7 +106,29 @@ export const getGlobalConfig = (callback: (config: GlobalConfig) => void) => {
 export const saveGlobalConfig = async (config: GlobalConfig) => {
   const path = `${CONFIG_COLLECTION}/${GLOBAL_CONFIG_ID}`;
   try {
-    await setDoc(doc(db, CONFIG_COLLECTION, GLOBAL_CONFIG_ID), config);
+    // 1. Persist any active media strings to decoupled /product_media/{productId}
+    const mediaPromises = config.products
+      .filter((p) => Boolean(p.imageUrl || p.backImageUrl))
+      .map((p) =>
+        saveProductMedia(p.id, {
+          imageUrl: p.imageUrl,
+          backImageUrl: p.backImageUrl,
+        })
+      );
+    if (mediaPromises.length > 0) {
+      await Promise.all(mediaPromises);
+    }
+
+    // 2. Prepare lightweight config without bulky base64 strings
+    const strippedConfig: GlobalConfig = {
+      ...config,
+      products: config.products.map(stripMediaFromProduct),
+    };
+
+    // 3. Deeply sanitize all fields to strip any undefined values
+    const sanitized = sanitizeForFirestore(strippedConfig);
+
+    await setDoc(doc(db, CONFIG_COLLECTION, GLOBAL_CONFIG_ID), sanitized);
   } catch (error) {
     handleFirestoreError(error, OperationType.WRITE, path);
   }

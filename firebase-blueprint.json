@@ -100,6 +100,18 @@
         "publishedBy": { "type": "string" }
       },
       "required": ["garments", "catalogGarments", "lastSyncedAt", "updatedAt"]
+    },
+    "ProductMedia": {
+      "title": "Product Media",
+      "description": "Natural aspect-ratio images for a product garment.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "imageUrl": { "type": "string" },
+        "backImageUrl": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["id", "updatedAt"]
     }
   },
   "firestore": {
@@ -114,6 +126,10 @@
     "pricing/{pricingId}": {
       "schema": "PricingSnapshot",
       "description": "Published pricing matrix and catalog snapshots."
+    },
+    "product_media/{productId}": {
+      "schema": "ProductMedia",
+      "description": "Garment front and back catalog photographs."
     }
   }
 }

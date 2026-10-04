@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import {
   ShieldCheck,
@@ -6,7 +6,7 @@ import {
   AlertTriangle,
   Menu,
 } from "lucide-react";
-import { GlobalConfig, Material } from "./types";
+import { GlobalConfig, Material, Product } from "./types";
 import {
   getGlobalConfig,
   saveGlobalConfig,
@@ -14,6 +14,7 @@ import {
   logout,
   auth,
 } from "./services/firebaseService";
+import { subscribeProductMedia, ProductMedia } from "./services/productMediaService";
 import { DEFAULT_GLOBAL_CONFIG } from "./data/defaultCatalog";
 import { validateAndNormalizeGlobalConfig } from "./utils/validation";
 import { onAuthStateChanged, User } from "firebase/auth";
@@ -108,13 +109,40 @@ export default function App() {
     return unsubscribe;
   }, []);
 
+  const mediaMapRef = useRef<Record<string, ProductMedia>>({});
+
+  const mergeProductsWithMedia = (
+    products: Product[],
+    mediaMap: Record<string, ProductMedia>
+  ): Product[] => {
+    return products.map((p) => {
+      const media = mediaMap[p.id];
+      if (media) {
+        return {
+          ...p,
+          imageUrl: media.imageUrl !== undefined ? media.imageUrl : p.imageUrl,
+          backImageUrl: media.backImageUrl !== undefined ? media.backImageUrl : p.backImageUrl,
+        };
+      }
+      return p;
+    });
+  };
+
   useEffect(() => {
     if (user) {
+      const unsubMedia = subscribeProductMedia((mediaMap) => {
+        mediaMapRef.current = mediaMap;
+        setConfig((prev) => ({
+          ...prev,
+          products: mergeProductsWithMedia(prev.products, mediaMap),
+        }));
+      });
+
       const unsub = getGlobalConfig((c) => {
         if (c) {
           let validated = validateAndNormalizeGlobalConfig(c, DEFAULT_GLOBAL_CONFIG);
           if (user && user.email) {
-            const hasUser = validated.authorizedUsers?.some(u => u.email === user.email);
+            const hasUser = validated.authorizedUsers?.some((u) => u.email === user.email);
             if (!hasUser) {
               validated = {
                 ...validated,
@@ -123,29 +151,33 @@ export default function App() {
                   {
                     id: `usr-${Date.now()}`,
                     email: user.email,
-                    name: user.displayName || user.email.split('@')[0],
-                    role: 'admin',
-                    status: 'ACTIVO',
-                    createdAt: new Date().toISOString().split('T')[0]
-                  }
-                ]
+                    name: user.displayName || user.email.split("@")[0],
+                    role: "admin",
+                    status: "ACTIVO",
+                    createdAt: new Date().toISOString().split("T")[0],
+                  },
+                ],
               };
               saveGlobalConfig(validated);
             }
           }
-          setConfig(validated);
+          const hydrated: GlobalConfig = {
+            ...validated,
+            products: mergeProductsWithMedia(validated.products, mediaMapRef.current),
+          };
+          setConfig(hydrated);
           try {
-            localStorage.setItem(
-              "azafran_backup_config",
-              JSON.stringify(validated)
-            );
+            localStorage.setItem("azafran_backup_config", JSON.stringify(hydrated));
           } catch {
             // Ignore
           }
         }
         setLoading(false);
       });
-      return unsub;
+      return () => {
+        unsubMedia();
+        unsub();
+      };
     } else {
       setLoading(false);
       setConfig(DEFAULT_GLOBAL_CONFIG);
@@ -155,17 +187,21 @@ export default function App() {
   const saveConfig = async (newConfig: GlobalConfig) => {
     setConfig(newConfig);
     try {
-      localStorage.setItem(
-        "azafran_backup_config",
-        JSON.stringify(newConfig)
-      );
+      localStorage.setItem("azafran_backup_config", JSON.stringify(newConfig));
     } catch {
       // Ignore
     }
     if (!user) return;
     setIsSaving(true);
-    await saveGlobalConfig(newConfig);
-    setIsSaving(false);
+    try {
+      await saveGlobalConfig(newConfig);
+    } catch (err: unknown) {
+      console.error("Save config error:", err);
+      const msg = err instanceof Error ? err.message : "Error al guardar en el servidor";
+      setFeedback({ text: `Error al guardar: ${msg}`, type: "error" });
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleRestoreConfig = async (restored: GlobalConfig) => {

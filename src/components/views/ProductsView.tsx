@@ -9,6 +9,7 @@ import { ProductProjectedPrices } from "../products/ProductProjectedPrices";
 import { ProductWorkbenchHeader } from "../products/ProductWorkbenchHeader";
 import { ProductMediaEditor } from "../products/ProductMediaEditor";
 import { generateNextSku, SKU_PREFIX } from "../../utils/skuGenerator";
+import { deleteProductMedia } from "../../services/productMediaService";
 
 interface ProductsViewProps {
   config: GlobalConfig;
@@ -50,6 +51,13 @@ export function ProductsView({ config, onChange, onNotify }: ProductsViewProps) 
 
   // Sync draft whenever selectedProductId or products change
   useEffect(() => {
+    if (
+      draftProduct &&
+      draftProduct.id === selectedProductId &&
+      !config.products.some((p) => p.id === selectedProductId)
+    ) {
+      return;
+    }
     const target = selectedProduct || (config.products.length > 0 ? config.products[0] : null);
     if (target) {
       if (target.id !== selectedProductId) setSelectedProductId(target.id);
@@ -91,9 +99,12 @@ export function ProductsView({ config, onChange, onNotify }: ProductsViewProps) 
       productionWeight: 1.0,
       fabricQuantity: 1,
     };
-    onChange({ ...config, products: [newProduct, ...config.products] });
-    selectProductById(newProduct.id);
+    setSelectedProductId(newProduct.id);
+    const cloned = JSON.parse(JSON.stringify(newProduct));
+    setDraftProduct(cloned);
+    setCommittedProduct(cloned);
     setPendingCloneId(null);
+    onChange({ ...config, products: [newProduct, ...config.products] });
     onNotify?.("Nueva prenda creada", "success");
   };
 
@@ -140,19 +151,19 @@ export function ProductsView({ config, onChange, onNotify }: ProductsViewProps) 
       id: clonedId,
       sku: generateNextSku(SKU_PREFIX.PRODUCT, config.products),
       name: `Copia de ${activeProduct.name || "Prenda"}`,
-      category: activeProduct.category,
-      description: activeProduct.description,
-      imageUrl: activeProduct.imageUrl,
-      backImageUrl: activeProduct.backImageUrl,
       productionWeight: activeProduct.productionWeight ?? 1.0,
       fabricQuantity: activeProduct.fabricQuantity ?? 1,
-      defaultFabricId: activeProduct.defaultFabricId,
       allowedFabricIds: activeProduct.allowedFabricIds ? [...activeProduct.allowedFabricIds] : [],
       ingredients: activeProduct.ingredients ? activeProduct.ingredients.map((i) => ({ ...i })) : [],
-      profitMargin: activeProduct.profitMargin,
-      wholesaleMargin: activeProduct.wholesaleMargin,
       variantOverrides: activeProduct.variantOverrides ? JSON.parse(JSON.stringify(activeProduct.variantOverrides)) : {},
     };
+    if (activeProduct.category) clonedProduct.category = activeProduct.category;
+    if (activeProduct.description) clonedProduct.description = activeProduct.description;
+    if (activeProduct.imageUrl) clonedProduct.imageUrl = activeProduct.imageUrl;
+    if (activeProduct.backImageUrl) clonedProduct.backImageUrl = activeProduct.backImageUrl;
+    if (activeProduct.defaultFabricId) clonedProduct.defaultFabricId = activeProduct.defaultFabricId;
+    if (activeProduct.profitMargin !== undefined) clonedProduct.profitMargin = activeProduct.profitMargin;
+    if (activeProduct.wholesaleMargin !== undefined) clonedProduct.wholesaleMargin = activeProduct.wholesaleMargin;
 
     const activeIdx = config.products.findIndex((p) => p.id === activeProduct.id);
     const updatedProducts = [...config.products];
@@ -162,10 +173,12 @@ export function ProductsView({ config, onChange, onNotify }: ProductsViewProps) 
       updatedProducts.unshift(clonedProduct);
     }
 
-    onChange({ ...config, products: updatedProducts });
     setSelectedProductId(clonedProduct.id);
-    setDraftProduct(JSON.parse(JSON.stringify(clonedProduct)));
+    const cloned = JSON.parse(JSON.stringify(clonedProduct));
+    setDraftProduct(cloned);
+    setCommittedProduct(cloned);
     setPendingCloneId(clonedProduct.id);
+    onChange({ ...config, products: updatedProducts });
     onNotify?.(`Copia creada: ${clonedProduct.name}`, "success");
   };
 
@@ -179,6 +192,7 @@ export function ProductsView({ config, onChange, onNotify }: ProductsViewProps) 
   };
 
   const removeProduct = (id: string) => {
+    deleteProductMedia(id);
     const newProducts = config.products.filter((p) => p.id !== id);
     onChange({ ...config, products: newProducts });
     if (selectedProductId === id) {
@@ -197,6 +211,10 @@ export function ProductsView({ config, onChange, onNotify }: ProductsViewProps) 
       const next: Product = { ...prev, ...updates };
       if (next.profitMargin === undefined) delete next.profitMargin;
       if (next.wholesaleMargin === undefined) delete next.wholesaleMargin;
+      if (next.imageUrl === undefined) delete next.imageUrl;
+      if (next.backImageUrl === undefined) delete next.backImageUrl;
+      if (next.category === undefined) delete next.category;
+      if (next.description === undefined) delete next.description;
       return next;
     });
   };

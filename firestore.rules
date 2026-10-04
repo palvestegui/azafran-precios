@@ -73,6 +73,13 @@ service cloud.firestore {
              data.updatedAt is string;
     }
 
+    function isValidProductMedia(data) {
+      return data.id is string &&
+             data.updatedAt is string &&
+             (!('imageUrl' in data) || data.imageUrl is string) &&
+             (!('backImageUrl' in data) || data.backImageUrl is string);
+    }
+
     // --- Collection: Config ---
     match /config/{configId} {
       allow read: if isValidId(configId);
@@ -83,6 +90,12 @@ service cloud.firestore {
     match /pricing/{pricingId} {
       allow read: if isValidId(pricingId);
       allow write: if isValidId(pricingId) && isValidPricing(incoming());
+    }
+
+    // --- Collection: Product Media ---
+    match /product_media/{productId} {
+      allow read: if isValidId(productId);
+      allow write: if isValidId(productId) && isValidProductMedia(incoming());
     }
 
     // --- Collection: Audits ---

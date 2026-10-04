@@ -299,12 +299,12 @@ export function ProductMediaEditor({
                       </button>
                     )}
                   </div>
-                  <div className="w-full aspect-[9/16] rounded-xl border border-stone-800 bg-stone-950 overflow-hidden relative group flex items-center justify-center">
+                  <div className="w-full aspect-[9/16] max-h-[380px] rounded-xl border border-stone-800 bg-stone-950 p-1 overflow-hidden relative group flex items-center justify-center">
                     {draftProduct.imageUrl ? (
                       <img
                         src={draftProduct.imageUrl}
                         alt="Vista Frontal"
-                        className="w-full h-full object-cover"
+                        className="max-w-full max-h-full object-contain select-none"
                       />
                     ) : (
                       <div className="text-center p-3 flex flex-col items-center gap-1.5 text-stone-600">
@@ -339,12 +339,12 @@ export function ProductMediaEditor({
                       </button>
                     )}
                   </div>
-                  <div className="w-full aspect-[9/16] rounded-xl border border-stone-800 bg-stone-950 overflow-hidden relative group flex items-center justify-center">
+                  <div className="w-full aspect-[9/16] max-h-[380px] rounded-xl border border-stone-800 bg-stone-950 p-1 overflow-hidden relative group flex items-center justify-center">
                     {draftProduct.backImageUrl ? (
                       <img
                         src={draftProduct.backImageUrl}
                         alt="Vista Posterior"
-                        className="w-full h-full object-cover"
+                        className="max-w-full max-h-full object-contain select-none"
                       />
                     ) : (
                       <div className="text-center p-3 flex flex-col items-center gap-1.5 text-stone-600">
