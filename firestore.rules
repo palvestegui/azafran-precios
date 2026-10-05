@@ -94,7 +94,8 @@ service cloud.firestore {
 
     // --- Collection: Product Media ---
     match /product_media/{productId} {
-      allow read: if isValidId(productId);
+      allow get: if isValidId(productId);
+      allow list: if true;
       allow write: if isValidId(productId) && isValidProductMedia(incoming());
     }
 

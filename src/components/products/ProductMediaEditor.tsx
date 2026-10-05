@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { Product } from "../../types";
 import { cropCenter916, splitDualDiptych } from "../../utils/imageSplitter";
+import { getProductMedia } from "../../services/productMediaService";
 
 interface ProductMediaEditorProps {
   key?: string;
@@ -27,9 +28,19 @@ export function ProductMediaEditor({
   const [isProcessing, setIsProcessing] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  // Collapse drawer when selected product changes to preserve workspace ergonomics
+  // Collapse drawer when selected product changes & hydrate media if not yet in memory
   useEffect(() => {
     setIsMediaDrawerOpen(false);
+    if (!draftProduct.imageUrl && !draftProduct.backImageUrl) {
+      getProductMedia(draftProduct.id).then((media) => {
+        if (media && (media.imageUrl || media.backImageUrl)) {
+          updateDraft({
+            ...(media.imageUrl ? { imageUrl: media.imageUrl } : {}),
+            ...(media.backImageUrl ? { backImageUrl: media.backImageUrl } : {}),
+          });
+        }
+      });
+    }
   }, [draftProduct.id]);
 
   const dualInputRef = useRef<HTMLInputElement>(null);

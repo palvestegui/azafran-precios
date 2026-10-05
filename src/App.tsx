@@ -129,15 +129,18 @@ export default function App() {
   };
 
   useEffect(() => {
-    if (user) {
-      const unsubMedia = subscribeProductMedia((mediaMap) => {
-        mediaMapRef.current = mediaMap;
-        setConfig((prev) => ({
-          ...prev,
-          products: mergeProductsWithMedia(prev.products, mediaMap),
-        }));
-      });
+    const unsubMedia = subscribeProductMedia((mediaMap) => {
+      mediaMapRef.current = mediaMap;
+      setConfig((prev) => ({
+        ...prev,
+        products: mergeProductsWithMedia(prev.products, mediaMap),
+      }));
+    });
+    return unsubMedia;
+  }, []);
 
+  useEffect(() => {
+    if (user) {
       const unsub = getGlobalConfig((c) => {
         if (c) {
           let validated = validateAndNormalizeGlobalConfig(c, DEFAULT_GLOBAL_CONFIG);
@@ -174,10 +177,7 @@ export default function App() {
         }
         setLoading(false);
       });
-      return () => {
-        unsubMedia();
-        unsub();
-      };
+      return unsub;
     } else {
       setLoading(false);
       setConfig(DEFAULT_GLOBAL_CONFIG);

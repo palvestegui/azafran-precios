@@ -24,6 +24,8 @@
     - Added `deleteProductMedia(id)` trigger on garment deletion.
   - **Real-Time Hydration & Error Notifications (`src/App.tsx`)**:
     - Subscribed to `product_media` in real time via `subscribeProductMedia`, hydrating in-memory products seamlessly.
+    - Resolved collection `list` permission denial in `firestore.rules`: updated `match /product_media/{productId}` from `allow read: if isValidId(productId)` (which rejected collection `list` operations because wildcard IDs are unbound during collection queries) to `allow get: if isValidId(productId); allow list: if true;`.
+    - Added on-demand direct single-doc hydration in `ProductMediaEditor.tsx` via `getProductMedia(draftProduct.id)` as a self-healing fallback.
     - Wrapped `saveConfig` in try/catch/finally to provide immediate user-facing notification toasts if network or Firestore errors occur.
 - **Strict Technical Constraints & Rule Compliance**:
   - Strict TypeScript: Zero `any`, zero `@ts-ignore` across all new and modified code.
