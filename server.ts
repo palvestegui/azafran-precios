@@ -1,29 +1,13 @@
 import express from "express";
 import path from "path";
 import { createServer as createViteServer } from "vite";
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { z } from "zod";
 import admin from "firebase-admin";
 import { getFirestore } from "firebase-admin/firestore";
 import { initializeApp as initClientApp } from "firebase/app";
-import { getFirestore as getClientDb, doc, getDoc, setDoc } from "firebase/firestore";
-import { calculateProductAnalysis } from "./src/utils/pricingCalculator.js";
-import { roundBob } from "./src/utils/calculations.js";
+import { getFirestore as getClientDb, doc, setDoc } from "firebase/firestore";
 import { publishPreciosToVentas } from "./src/utils/ventasPublisher.js";
-import { GlobalConfig } from "./src/types.js";
-import { DEFAULT_GLOBAL_CONFIG } from "./src/data/defaultCatalog.js";
-import { ensureMaterialSkus, ensureProductSkus, generateNextSku, SKU_PREFIX } from "./src/utils/skuGenerator.js";
+import { registerMcpRoutes } from "./src/server/mcpRouter.js";
 import firebaseConfig from "./firebase-applet-config.json";
-
-interface PricingMatrixItem {
-  garmentSku?: string;
-  garment: string;
-  fabricSku?: string;
-  fabric: string;
-  consumptionMeters: number;
-  retailPrice: number;
-  wholesalePrice: number;
-}
 
 const clientApp = initClientApp(firebaseConfig);
 const clientDb = getClientDb(clientApp, firebaseConfig.firestoreDatabaseId);
@@ -36,191 +20,25 @@ try {
   console.warn("External Ventas DB init notice:", e instanceof Error ? e.message : e);
 }
 
-const mcpServer = new McpServer({ name: "ChefwearPricingMCP", version: "1.0.0" });
-
-async function getLocalConfig(): Promise<GlobalConfig> {
-  try {
-    const snap = await getDoc(doc(clientDb, "config", "system-wide-config"));
-    const raw = snap.exists() ? (snap.data() as GlobalConfig) : DEFAULT_GLOBAL_CONFIG;
-    return {
-      ...raw,
-      products: ensureProductSkus(raw.products || []),
-      materials: ensureMaterialSkus(raw.materials || []),
-    };
-  } catch (error) {
-    console.warn("Using default config, live fetch notice:", error instanceof Error ? error.message : error);
-    return {
-      ...DEFAULT_GLOBAL_CONFIG,
-      products: ensureProductSkus(DEFAULT_GLOBAL_CONFIG.products || []),
-      materials: ensureMaterialSkus(DEFAULT_GLOBAL_CONFIG.materials || []),
-    };
-  }
-}
-
-function buildMatrix(config: GlobalConfig): PricingMatrixItem[] {
-  const matrix: PricingMatrixItem[] = [];
-  const allFabrics = config.materials.filter((m) => m.category === "fabric");
-  for (const prod of config.products) {
-    const allowed = allFabrics.filter((f) => !prod.allowedFabricIds?.length || prod.allowedFabricIds.includes(f.id));
-    for (const fabric of allowed) {
-      const a = calculateProductAnalysis(prod, config, fabric.id);
-      const o = prod.variantOverrides?.[fabric.id];
-      const r = o?.retailPrice ?? o?.customRetailPrice ?? a.recommendedPrice;
-      const w = o?.wholesalePrice ?? o?.customWholesalePrice ?? a.recommendedWholesalePrice;
-      matrix.push({
-        garmentSku: prod.sku,
-        garment: prod.name,
-        fabricSku: fabric.sku,
-        fabric: fabric.name,
-        consumptionMeters: prod.fabricQuantity ?? 0,
-        retailPrice: roundBob(r),
-        wholesalePrice: roundBob(w),
-      });
-    }
-  }
-  return matrix;
-}
-
-function buildBundle(config: GlobalConfig) {
-  return {
-    materials: config.materials,
-    products: config.products,
-    matrix: buildMatrix(config),
-    stats: {
-      totalProducts: config.products.length,
-      totalFabrics: config.materials.filter((m) => m.category === "fabric").length,
-      lastUpdated: new Date().toISOString(),
-    },
-  };
-}
-
-async function addProduct(name: string, category: string, fabricMeters: number, description?: string): Promise<string> {
-  const config = await getLocalConfig();
-  const sku = generateNextSku(SKU_PREFIX.PRODUCT, config.products);
-  config.products.push({
-    id: `prod-${Date.now()}`,
-    sku,
-    name,
-    category,
-    description,
-    fabricQuantity: fabricMeters,
-    ingredients: [],
-    productionWeight: 1,
-  });
-  try { await setDoc(doc(clientDb, "config", "system-wide-config"), config); } catch { /* ignore */ }
-  return `Product ${name} (${sku}) added successfully.`;
-}
-
-async function updateFabricCost(fabricName: string, costPerMeter: number): Promise<{ message: string; isError?: boolean }> {
-  const config = await getLocalConfig();
-  const fabric = config.materials.find((m) => m.name.toLowerCase() === fabricName.toLowerCase() && m.category === "fabric");
-  if (!fabric) return { message: `Fabric ${fabricName} not found.`, isError: true };
-  fabric.pricePerUnit = costPerMeter;
-  try { await setDoc(doc(clientDb, "config", "system-wide-config"), config); } catch { /* ignore */ }
-  return { message: `Fabric ${fabricName} updated to Bs ${costPerMeter}/m.` };
-}
-
-// MCP Tools
-mcpServer.tool("precios_get_bundle", "Unified bundle of materials, products, matrix, and catalog stats", {}, async () => ({
-  content: [{ type: "text", text: JSON.stringify(buildBundle(await getLocalConfig()), null, 2) }]
-}));
-mcpServer.tool("precios_get_matrix", "Returns active pricing matrix", {}, async () => ({
-  content: [{ type: "text", text: JSON.stringify(buildMatrix(await getLocalConfig()), null, 2) }]
-}));
-mcpServer.tool("precios_get_materials", "Returns fabrics and supplies", {}, async () => ({
-  content: [{ type: "text", text: JSON.stringify((await getLocalConfig()).materials, null, 2) }]
-}));
-mcpServer.tool("precios_add_product", "Adds a new garment", {
-  name: z.string(), category: z.string(), fabricMeters: z.number(), laborCost: z.number(), description: z.string().optional(),
-}, async ({ name, category, fabricMeters, description }) => ({ content: [{ type: "text", text: await addProduct(name, category, fabricMeters, description) }] }));
-mcpServer.tool("precios_update_fabric_cost", "Updates fabric cost per meter", { fabricName: z.string(), costPerMeter: z.number() }, async ({ fabricName, costPerMeter }) => {
-  const res = await updateFabricCost(fabricName, costPerMeter);
-  return { content: [{ type: "text", text: res.message }], isError: res.isError };
-});
-mcpServer.tool("precios_sync_to_ventas", "Syncs rounded prices to Ventas DB", {}, async () => {
-  try {
-    const result = await publishPreciosToVentas(clientDb, dbVentas);
-    return { content: [{ type: "text", text: JSON.stringify({ success: true, baseCount: result.baseCount, catalogCount: result.catalogCount, lastSyncedAt: result.lastSyncedAt }) }] };
-  } catch (err: unknown) {
-    const errorMsg = err instanceof Error ? err.message : String(err);
-    console.error("Sync error:", errorMsg);
-    return { content: [{ type: "text", text: JSON.stringify({ success: false, error: errorMsg }) }], isError: true };
-  }
-});
-
 async function startServer() {
   const app = express();
   const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
-  app.use(express.json());
+  app.use(express.json({ limit: "50mb" }));
+  app.use(express.urlencoded({ limit: "50mb", extended: true }));
 
-  app.get("/mcp", (_req, res) => {
-    res.setHeader("Access-Control-Allow-Origin", "*").json({ status: "ok", server: "azafran-precios", protocol: "mcp" });
-  });
+  // Mount dual-transport Model Context Protocol (MCP) router
+  registerMcpRoutes(app, clientDb, dbVentas);
 
-  app.post("/mcp", async (req, res) => {
-    res.setHeader("Access-Control-Allow-Origin", "*");
-    const { jsonrpc, id, method, params } = req.body || {};
-    if (method === "initialize") {
-      return res.json({ jsonrpc: "2.0", id, result: { protocolVersion: "2024-11-05", capabilities: { tools: {} }, serverInfo: { name: "azafran-precios", version: "1.0.0" } } });
-    }
-    if (method === "notifications/initialized") return res.status(200).json({});
-    if (method === "tools/list") {
-      return res.json({
-        jsonrpc: "2.0", id,
-        result: {
-          tools: [
-            { name: "precios_get_bundle", description: "Get complete catalog bundle (materials, products, matrix, stats)", inputSchema: { type: "object", properties: {} } },
-            { name: "precios_get_matrix", description: "Get live rounded pricing matrix", inputSchema: { type: "object", properties: {} } },
-            { name: "precios_get_materials", description: "Get fabrics and supplies costs", inputSchema: { type: "object", properties: {} } },
-            { name: "precios_add_product", description: "Add a new garment", inputSchema: { type: "object", properties: { name: { type: "string" }, category: { type: "string" }, fabricMeters: { type: "number" }, laborCost: { type: "number" }, description: { type: "string" } }, required: ["name", "category", "fabricMeters", "laborCost"] } },
-            { name: "precios_update_fabric_cost", description: "Update fabric cost per meter", inputSchema: { type: "object", properties: { fabricName: { type: "string" }, costPerMeter: { type: "number" } }, required: ["fabricName", "costPerMeter"] } },
-            { name: "precios_sync_to_ventas", description: "Sync rounded prices to Ventas pricing/global", inputSchema: { type: "object", properties: {} } },
-          ],
-        },
-      });
-    }
-
-    if (method === "tools/call") {
-      const toolName = params?.name;
-      const args = (params?.arguments || {}) as Record<string, unknown>;
-      try {
-        let toolResult: unknown;
-        const config = await getLocalConfig();
-        if (toolName === "precios_get_bundle") toolResult = buildBundle(config);
-        else if (toolName === "precios_get_matrix") toolResult = buildMatrix(config);
-        else if (toolName === "precios_get_materials") toolResult = config.materials;
-        else if (toolName === "precios_add_product") {
-          toolResult = await addProduct(
-            typeof args.name === "string" ? args.name : "Nueva Prenda",
-            typeof args.category === "string" ? args.category : "General",
-            typeof args.fabricMeters === "number" ? args.fabricMeters : 1,
-            typeof args.description === "string" ? args.description : undefined,
-          );
-        } else if (toolName === "precios_update_fabric_cost") {
-          const r = await updateFabricCost(typeof args.fabricName === "string" ? args.fabricName : "", typeof args.costPerMeter === "number" ? args.costPerMeter : 0);
-          toolResult = r.message;
-        } else if (toolName === "precios_sync_to_ventas") {
-          try {
-            const syncRes = await publishPreciosToVentas(clientDb, dbVentas);
-            toolResult = { success: true, baseCount: syncRes.baseCount, catalogCount: syncRes.catalogCount, lastSyncedAt: syncRes.lastSyncedAt };
-          } catch (syncErr: unknown) {
-            const errorMsg = syncErr instanceof Error ? syncErr.message : String(syncErr);
-            console.error("Sync error:", errorMsg);
-            toolResult = { success: false, error: errorMsg };
-          }
-        } else toolResult = `Tool ${toolName} not found.`;
-        return res.json({ jsonrpc: "2.0", id, result: { content: [{ type: "text", text: JSON.stringify(toolResult, null, 2) }] } });
-      } catch (err: unknown) {
-        return res.json({ jsonrpc: "2.0", id, error: { code: -32000, message: err instanceof Error ? err.message : String(err) } });
-      }
-    }
-    return res.status(404).json({ error: "Method not found" });
-  });
-
-  app.options("/mcp", (_req, res) => res.setHeader("Access-Control-Allow-Origin", "*").setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS").setHeader("Access-Control-Allow-Headers", "Content-Type").status(204).end());
   app.get("/api/health", (_req, res) => res.json({ status: "ok" }));
 
-  app.options("/api/pricing/sync", (_req, res) => res.setHeader("Access-Control-Allow-Origin", "*").setHeader("Access-Control-Allow-Methods", "POST, OPTIONS").setHeader("Access-Control-Allow-Headers", "Content-Type").status(204).end());
+  app.options("/api/pricing/sync", (_req, res) =>
+    res
+      .setHeader("Access-Control-Allow-Origin", "*")
+      .setHeader("Access-Control-Allow-Methods", "POST, OPTIONS")
+      .setHeader("Access-Control-Allow-Headers", "Content-Type")
+      .status(204)
+      .end()
+  );
 
   app.post("/api/pricing/sync", async (req, res) => {
     res.setHeader("Access-Control-Allow-Origin", "*");

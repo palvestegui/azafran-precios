@@ -14,7 +14,11 @@ export const PricingMatrixView: React.FC<PricingMatrixViewProps> = ({
   onChange,
 }) => {
   const [ventasUrl, setVentasUrl] = useState<string>(() => {
-    return localStorage.getItem("azafran_target_ventas_url") || "https://sistema-azafran.ai.studio";
+    const saved = localStorage.getItem("azafran_target_ventas_url");
+    if (!saved || saved === "https://sistema-azafran.ai.studio" || saved === "https://sistema-azafran.ai.studio/") {
+      return "https://azafranstaging.ai.studio/";
+    }
+    return saved;
   });
   const [isPublishing, setIsPublishing] = useState(false);
   const [confirmStep, setConfirmStep] = useState(false);
@@ -55,7 +59,16 @@ export const PricingMatrixView: React.FC<PricingMatrixViewProps> = ({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),
         });
-      } catch (fetchErr: unknown) {
+        if (!res.ok) {
+          // If direct fetch returns HTTP 4xx/5xx (e.g. 413 or CORS block), try server-side proxy
+          const proxyRes = await fetch("/api/sync-proxy", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ targetUrl: cleanUrl, payload }),
+          }).catch(() => null);
+          if (proxyRes) res = proxyRes;
+        }
+      } catch {
         // Fallback to server-side proxy if direct browser fetch is blocked by CORS/network policy
         const proxyRes = await fetch("/api/sync-proxy", {
           method: "POST",
@@ -63,10 +76,10 @@ export const PricingMatrixView: React.FC<PricingMatrixViewProps> = ({
           body: JSON.stringify({ targetUrl: cleanUrl, payload }),
         }).catch(() => null);
 
-        if (proxyRes && proxyRes.ok) {
+        if (proxyRes) {
           res = proxyRes;
         } else {
-          throw fetchErr;
+          throw new Error("No se pudo conectar con el servidor de destino ni con el proxy.");
         }
       }
 
@@ -105,7 +118,7 @@ export const PricingMatrixView: React.FC<PricingMatrixViewProps> = ({
           type="text"
           value={ventasUrl}
           onChange={(e) => handleSaveVentasUrl(e.target.value)}
-          placeholder="https://sistema-azafran.ai.studio"
+          placeholder="https://azafranstaging.ai.studio/"
           title="URL destino de Ventas para sincronización HTTP directa (editable)"
           className="w-44 sm:w-56 pl-7 pr-2 py-1.5 bg-stone-900 border border-stone-800 hover:border-stone-700 focus:border-orange-500 rounded-xl text-xs font-mono text-stone-300 placeholder:text-stone-600 focus:outline-none transition-all shadow-inner"
         />

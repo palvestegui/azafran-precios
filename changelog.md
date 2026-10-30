@@ -1,6 +1,49 @@
 # Changelog
 
-## [Unreleased] - 2026-10-04
+## [Unreleased] - 2026-10-30
+
+### HTTP 413 Body Limit Resolution & Staging Target Integration (`server.ts`, `PricingMatrixView.tsx`)
+- **Diagnosis & Root Cause of HTTP 413 (Payload Too Large)**:
+  - Express's default `express.json()` parser limit is 100KB. When publishing garments with detailed specifications and high-resolution media references or large payloads, requests exceeded this threshold, causing the server to reject the sync payload with HTTP 413.
+- **Architectural Solution & Remediation**:
+  - **Body Parser Limits (`server.ts`)**:
+    - Expanded Express JSON body parser to `50mb`: `app.use(express.json({ limit: '50mb' }))`.
+    - Added urlencoded parser to `50mb`: `app.use(express.urlencoded({ limit: '50mb', extended: true }))`.
+    - Maintained proxy forwarding at `/api/sync-proxy` with proper JSON Content-Type and payload serialization.
+  - **Default Staging Target URL (`src/components/views/PricingMatrixView.tsx`)**:
+    - Updated initial state and fallback in `PricingMatrixView.tsx` to default to `https://azafranstaging.ai.studio/`.
+    - Updated URL input placeholder to `https://azafranstaging.ai.studio/`.
+    - Improved fallback in `handlePublishClick` so that if direct browser fetch encounters network/CORS restrictions or non-200 responses, it automatically routes through `/api/sync-proxy`.
+  - **Compliance & Line Limits**:
+    - `server.ts` maintained at 101 lines (strictly < 300 lines limit).
+    - `PricingMatrixView.tsx` maintained at 182 lines (strictly < 500 lines limit).
+    - Type safety: zero `any` additions. Verified with `npx tsc --noEmit` (exit code 0).
+
+## [2026-10-10]
+
+### Dual-Transport MCP Connector Remediation (`src/server/mcpRouter.ts`, `src/server/catalogServices.ts`, `server.ts`)
+- **Diagnosis & Root Cause of MCP Connector Failures**:
+  - **Issue 1 (Missing SSE Transport)**: MCP clients connecting over HTTP via Server-Sent Events (SSE) sent `GET /mcp` with `Accept: text/event-stream`. The previous implementation returned a closed static JSON payload (`application/json`), aborting the connection.
+  - **Issue 2 (Ping Heartbeat Failure)**: MCP clients issuing `ping` received `HTTP 404 {"error": "Method not found"}`, causing them to mark the server as dead.
+  - **Issue 3 (Incomplete Discovery Handshake)**: Discovery methods (`prompts/list`, `resources/list`, `resources/templates/list`) returned `HTTP 404`, violating JSON-RPC 2.0 specifications.
+  - **Issue 4 (Non-Compliant Error Codes)**: Unrecognized methods returned HTTP 404 instead of JSON-RPC 2.0 error `{ jsonrpc: "2.0", id, error: { code: -32601, message: "Method not found" } }`.
+  - **Issue 5 (Restrictive CORS Headers)**: `/mcp` CORS preflight only allowed `Content-Type`, blocking standard headers like `Accept`, `Authorization`, `x-session-id`, `mcp-session-id`.
+- **Architectural Solution & Remediation**:
+  - **Modular Architecture (Rule 300 Compliance)**:
+    - Extracted catalog business logic into `src/server/catalogServices.ts` (116 lines).
+    - Built comprehensive dual-transport router in `src/server/mcpRouter.ts` (285 lines).
+    - Reduced `server.ts` to 100 lines (strictly complying with the 300-line limit for logical files).
+  - **Full Dual-Transport Support**:
+    - **SSE Streaming**: Built `GET /mcp` handler using official `@modelcontextprotocol/sdk/server/sse.js` `SSEServerTransport`, yielding `event: endpoint\ndata: /mcp/messages?sessionId=...` with a 15-second heartbeat keep-alive comment stream.
+    - **Stateless JSON-RPC 2.0**: Handled direct HTTP POST messages with complete spec support for `initialize`, `notifications/initialized`, `ping`, `tools/list`, `tools/call`, `prompts/list`, `resources/list`, `resources/templates/list`, and `-32601` method-not-found error responses.
+    - **Permissive CORS Preflight**: Expanded `Access-Control-Allow-Headers` on `/mcp` and `/mcp/messages` to allow `Content-Type, Accept, Authorization, x-session-id, mcp-session-id, cache-control`.
+- **Verification**:
+  - Verified live SSE connection with `curl -i -H "Accept: text/event-stream" http://localhost:3000/mcp` returning `200 OK`, `Content-Type: text/event-stream`, and valid endpoint event.
+  - Verified `ping`, `prompts/list`, `resources/list`, and error code `-32601`.
+  - Verified all 6 tools (`precios_get_bundle`, `precios_get_matrix`, `precios_get_materials`, `precios_add_product`, `precios_update_fabric_cost`, `precios_sync_to_ventas`).
+  - Verified TypeScript compilation (`npx tsc --noEmit`) and production bundling (`npm run build`) exited 0 with no errors.
+
+## [2026-10-04]
 
 ### Decoupled Media Architecture & Resolution of Product Disappearance Bug (`productMediaService.ts`, `firestoreSanitizer.ts`, `ProductsView.tsx`, `App.tsx`)
 - **Diagnosis of Product Creation and Duplication Disappearance**:
